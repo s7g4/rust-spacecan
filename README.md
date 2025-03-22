@@ -109,12 +109,12 @@ We welcome contributions! To contribute:
 4. Push to your branch (`git push origin feature-xyz`)
 5. Open a Pull Request 🚀
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+See [CONTRIBUTING.txt](CONTRIBUTING.txt) for detailed guidelines.
 
 ---
 
 ## **📄 License**
-This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md) for details.
+This project is licensed under the **MIT License**. See [LICENSE.txt](LICENSE.txt) for details.
 
 ---
 

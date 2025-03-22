@@ -1,0 +1,47 @@
+# Rust build files
+/target
+/Cargo.lock
+
+# Rust editor files
+*.rs.bk
+*.rs.swp
+
+# Cargo's default .gitignore file for some generated files
+**/*.rs.bk
+**/*.swp
+
+# VSCode settings
+.vscode/
+
+# MacOS system files
+.DS_Store
+
+# Linux system files
+*~
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+
+# Log files
+*.log
+
+# Backup files
+*.bak
+
+# IDE or Editor Files
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# JetBrains IDE Files
+.idea/
+
+# Rust documentation files
+/doc/
+
+# Cargo cache (optional, can be useful but not needed in repo)
+.cargo/
+
+# Backup and temporary files
+*.swp
