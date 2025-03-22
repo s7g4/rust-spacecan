@@ -1,7 +1,5 @@
 # 🚀 SpaceCAN - Rust Implementation for LibreCube
 
-![LibreCube Logo](https://raw.githubusercontent.com/LibreCube/LibreCube.github.io/main/assets/logo.png)  
-
 ## **🔹 About SpaceCAN**
 SpaceCAN is a communication protocol designed for **small spacecraft systems**. It provides a **lightweight, reliable, and efficient** way to exchange commands and telemetry data between subsystems in space applications.
 
