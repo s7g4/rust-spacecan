@@ -36,10 +36,10 @@ SpaceCAN/
 │   │   ├── ST03_housekeeping.rs          # Housekeeping service
 │   │   ├── ST08_function_management.rs   # Function management
 │   │   ├── ST17_test.rs                  # System test service
-│   │   ├── ST20_parameter_management.rs   # Parameter management
+│   │   ├── ST20_parameter_management.rs  # Parameter management
 │   ├── transport/       # Low-level transport layer
 │   │   ├── base.rs              # Bus implementation
-│   │   ├── buffer.rs            # Frame buffering
+│   │   ├── frame_buffer.rs       # Frame buffering
 │-- tests/           # Unit test suite
 │   ├── test_base.rs         # Unit tests for Bus implementation
 │   ├── test_can_frame.rs    # Unit tests for CAN frames
@@ -48,10 +48,18 @@ SpaceCAN/
 │   ├── test_packet.rs       # Unit tests for packet fragmentation
 │   ├── test_sync.rs         # Unit tests for sync processing
 │   ├── test_timer.rs        # Unit tests for timer module
+│-- examples/                     # Example implementations
+│   ├── simple_send.rs            # Basic CAN send example
+│   ├── simple_receive.rs         # Basic CAN receive example
+│   ├── heartbeat_monitor.rs      # Example monitoring heartbeat
+│-- docs/                     # Example implementations
+│   ├── ECSS-E-ST-50-15C.pdf      # File on CAN system
+│   ├── ECSS-E-ST-70-41C(15April2016).pdf         # Updated file on CAN system
 │-- README.md               # Project documentation
 │-- CONTRIBUTING.md         # Contribution guidelines
 │-- LICENSE.md              # Project license
-│-- Cargo.toml              # Rust package manager file
+│-- Cargo.toml              # Rust package configuration
+
 ```
 
 ---
