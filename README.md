@@ -1,6 +1,6 @@
 # 🚀 SpaceCAN - Rust Implementation for LibreCube
 
-![LibreCube Logo](https://librecube.gitlab.io/assets/logo.png)  
+![LibreCube Logo](https://raw.githubusercontent.com/LibreCube/LibreCube.github.io/main/assets/logo.png)  
 
 ## **🔹 About SpaceCAN**
 SpaceCAN is a communication protocol designed for **small spacecraft systems**. It provides a **lightweight, reliable, and efficient** way to exchange commands and telemetry data between subsystems in space applications.
@@ -24,23 +24,24 @@ This repository contains a **Rust-based implementation** of the SpaceCAN protoco
 ## **📌 Project Structure**
 ```
 SpaceCAN/
-│-- primitives/       # Core communication components
-│   ├── can_frame.rs        # CAN Frame struct & serialization
-│   ├── heartbeat.rs        # Heartbeat signal processing
-│   ├── network.rs          # CAN network handling
-│   ├── packet.rs           # Packet fragmentation & reassembly
-│   ├── sync.rs             # Sync message handling
-│   ├── timer.rs            # Periodic task scheduling
-│-- services/        # Service layer components
-│   ├── core.rs              # Packet routing & processing
-│   ├── ST01_request_verification.rs  # Request verification
-│   ├── ST03_housekeeping.rs          # Housekeeping service
-│   ├── ST08_function_management.rs   # Function management
-│   ├── ST17_test.rs                  # System test service
-│   ├── ST20_parameter_management.rs   # Parameter management
-│-- transport/       # Low-level transport layer
-│   ├── base.rs              # Bus implementation
-│   ├── buffer.rs            # Frame buffering
+│-- src/
+│   ├── primitives/       # Core communication components
+│   │   ├── can_frame.rs        # CAN Frame struct & serialization
+│   │   ├── heartbeat.rs        # Heartbeat signal processing
+│   │   ├── network.rs          # CAN network handling
+│   │   ├── packet.rs           # Packet fragmentation & reassembly
+│   │   ├── sync.rs             # Sync message handling
+│   │   ├── timer.rs            # Periodic task scheduling
+│   ├── services/        # Service layer components
+│   │   ├── core.rs              # Packet routing & processing
+│   │   ├── ST01_request_verification.rs  # Request verification
+│   │   ├── ST03_housekeeping.rs          # Housekeeping service
+│   │   ├── ST08_function_management.rs   # Function management
+│   │   ├── ST17_test.rs                  # System test service
+│   │   ├── ST20_parameter_management.rs   # Parameter management
+│   ├── transport/       # Low-level transport layer
+│   │   ├── base.rs              # Bus implementation
+│   │   ├── buffer.rs            # Frame buffering
 │-- tests/           # Unit test suite
 │   ├── test_base.rs         # Unit tests for Bus implementation
 │   ├── test_can_frame.rs    # Unit tests for CAN frames
@@ -49,10 +50,9 @@ SpaceCAN/
 │   ├── test_packet.rs       # Unit tests for packet fragmentation
 │   ├── test_sync.rs         # Unit tests for sync processing
 │   ├── test_timer.rs        # Unit tests for timer module
-│-- controller.rs
-│-- reciever.rs
 │-- README.md               # Project documentation
 │-- CONTRIBUTING.md         # Contribution guidelines
+│-- LICENSE.md              # Project license
 │-- Cargo.toml              # Rust package manager file
 ```
 
@@ -116,7 +116,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ---
 
 ## **📄 License**
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md) for details.
 
 ---
 
