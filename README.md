@@ -129,6 +129,6 @@ This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md)
 ## **📢 Contact & Community**
 For questions and discussions, join the **LibreCube Community**:
 - **Website:** [LibreCube Official Site](https://librecube.gitlab.io/)
-- **Email:** [shauryagaur07@gmail.com]
+- **Email:** shauryagaur07@gmail.com
 
 🚀 **Let's build the future of space communication together!**
