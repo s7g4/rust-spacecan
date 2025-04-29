@@ -8,15 +8,14 @@ trait PacketProcessor {
 
 // Define the PacketUtilizationService struct
 struct PacketUtilizationService {
-    packet_monitor: Option<Box<dyn Fn(u8, u8, Vec<u8>, u32)>>,
-    request_verification: Option<RequestVerificationServiceController>,
-    housekeeping: Option<HousekeepingServiceController>,
-    function_management: Option<FunctionManagementServiceController>,
-    test: Option<TestServiceController>,
-    parameter_management: Option<ParameterManagementServiceController>,
+    packet_monitor: Option<Arc<dyn Fn(u8, u8, Vec<u8>, u32) + Send + Sync>>,
+    request_verification: Option<Arc<RequestVerificationServiceResponder>>,
+    housekeeping: Option<Arc<HousekeepingServiceResponder>>,
+    function_management: Option<Arc<FunctionManagementServiceResponder>>,
+    test: Option<Arc<TestServiceResponder>>,
+    parameter_management: Option<Arc<ParameterManagementServiceResponder>>,
 }
 
-// Implement methods for PacketUtilizationService
 impl PacketUtilizationService {
     fn new() -> Self {
         Self {
@@ -35,58 +34,89 @@ struct PacketUtilizationServiceController {
     parent: Arc<Mutex<PacketUtilizationService>>,
 }
 
+impl Clone for PacketUtilizationServiceController {
+    fn clone(&self) -> Self {
+        PacketUtilizationServiceController {
+            parent: Arc::clone(&self.parent),
+        }
+    }
+}
+
 impl PacketUtilizationServiceController {
     fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
-        let mut parent_service = parent.lock().unwrap();
         let controller = Self { parent: parent.clone() };
 
-        parent_service.request_verification = Some(RequestVerificationServiceController::new(controller.clone()));
-        parent_service.housekeeping = Some(HousekeepingServiceController::new(controller.clone()));
-        parent_service.function_management = Some(FunctionManagementServiceController::new(controller.clone()));
-        parent_service.test = Some(TestServiceController::new(controller.clone()));
-        parent_service.parameter_management = Some(ParameterManagementServiceController::new(controller.clone()));
+        let responder = Arc::new(PacketUtilizationServiceResponder::new(parent.clone()));
+
+        let mut parent_service = parent.lock().unwrap();
+        parent_service.request_verification = Some(Arc::new(RequestVerificationServiceResponder::new(responder.clone())));
+        parent_service.housekeeping = Some(Arc::new(HousekeepingServiceResponder::new(responder.clone())));
+        parent_service.function_management = Some(Arc::new(FunctionManagementServiceResponder::new(responder.clone())));
+        parent_service.test = Some(Arc::new(TestServiceResponder::new(responder.clone())));
+        parent_service.parameter_management = Some(Arc::new(ParameterManagementServiceResponder::new(responder.clone())));
 
         controller
     }
 
-    fn send(&self, packet: Vec<u8>, node_id: u32) {
-        if let Ok(parent_service) = self.parent.lock() {
-            // Simulate sending a packet
-            // parent_service.send_packet(packet, node_id);
-        }
-    }
-
     fn received_packet(&self, data: Vec<u8>, node_id: u32) {
+        if data.len() < 2 {
+            eprintln!("Invalid packet: insufficient data");
+            return;
+        }
+
         let service = data[0];
         let subtype = data[1];
-        let data = data[2..].to_vec();
+        let payload = data[2..].to_vec();
 
-        if let Some(monitor) = &self.parent.lock().unwrap().packet_monitor {
-            monitor(service, subtype, data.clone(), node_id);
+        // Handle packet monitor
+        if let Some(monitor) = self.parent.lock().unwrap().packet_monitor.clone() {
+            monitor(service, subtype, payload.clone(), node_id);
         }
 
-        // Dispatch packet to the individual service handlers
+        // Extract service responders
+        let parent = self.parent.lock().unwrap();
+        let request_verification = parent.request_verification.clone();
+        let housekeeping = parent.housekeeping.clone();
+        let function_management = parent.function_management.clone();
+        let test = parent.test.clone();
+        let parameter_management = parent.parameter_management.clone();
+        drop(parent); // Release lock early
+
+        // Match service and spawn threads
         match service {
             1 => {
-                let request_verification = self.parent.lock().unwrap().request_verification.as_ref().unwrap();
-                thread::spawn(move || request_verification.process(service, subtype, data, node_id));
+                if let Some(rv) = request_verification {
+                    let data_clone = payload.clone();
+                    thread::spawn(move || rv.process(service, subtype, data_clone, node_id));
+                }
             }
             3 => {
-                let housekeeping = self.parent.lock().unwrap().housekeeping.as_ref().unwrap();
-                thread::spawn(move || housekeeping.process(service, subtype, data, node_id));
+                if let Some(hk) = housekeeping {
+                    let data_clone = payload.clone();
+                    thread::spawn(move || hk.process(service, subtype, data_clone, node_id));
+                }
             }
             8 => {
-                // Not applicable
+                if let Some(fm) = function_management {
+                    let data_clone = payload.clone();
+                    thread::spawn(move || fm.process(service, subtype, data_clone, node_id));
+                }
             }
             17 => {
-                let test = self.parent.lock().unwrap().test.as_ref().unwrap();
-                thread::spawn(move || test.process(service, subtype, data, node_id));
+                if let Some(t) = test {
+                    let data_clone = payload.clone();
+                    thread::spawn(move || t.process(service, subtype, data_clone, node_id));
+                }
             }
             20 => {
-                let parameter_management = self.parent.lock().unwrap().parameter_management.as_ref().unwrap();
-                thread::spawn(move || parameter_management.process(service, subtype, data, node_id));
+                if let Some(pm) = parameter_management {
+                    let data_clone = payload.clone();
+                    thread::spawn(move || pm.process(service, subtype, data_clone, node_id));
+                }
             }
-            _ => {}
+            _ => {
+                eprintln!("Unknown service: {}", service);
+            }
         }
     }
 }
@@ -98,128 +128,65 @@ struct PacketUtilizationServiceResponder {
 
 impl PacketUtilizationServiceResponder {
     fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
-        let mut parent_service = parent.lock().unwrap();
-        let responder = Self { parent: parent.clone() };
-
-        parent_service.request_verification = Some(RequestVerificationServiceResponder::new(responder.clone()));
-        parent_service.housekeeping = Some(HousekeepingServiceResponder::new(responder.clone()));
-        parent_service.function_management = Some(FunctionManagementServiceResponder::new(responder.clone()));
-        parent_service.test = Some(TestServiceResponder::new(responder.clone()));
-        parent_service.parameter_management = Some(ParameterManagementServiceResponder::new(responder.clone()));
-
-        responder
+        Self { parent }
     }
+}
 
-    fn send(&self, packet: Vec<u8>) {
-        if let Ok(parent_service) = self.parent.lock() {
-            // Simulate sending a packet
-            // parent_service.send_packet(packet);
+// Implement PacketProcessor for all responders
+macro_rules! impl_packet_processor {
+    ($responder:ident) => {
+        impl PacketProcessor for $responder {
+            fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32) {
+                println!(
+                    "{} processing: service={}, subtype={}, data={:?}, node_id={}",
+                    stringify!($responder),
+                    service,
+                    subtype,
+                    data,
+                    node_id
+                );
+            }
         }
-    }
-
-    fn received_packet(&self, data: Vec<u8>, node_id: u32) {
-        let service = data[0];
-        let subtype = data[1];
-        let data = data[2..].to_vec();
-
-        if let Some(monitor) = &self.parent.lock().unwrap().packet_monitor {
-            monitor(service, subtype, data.clone(), node_id);
-        }
-
-        // Dispatch packet to the individual service handlers
-        match service {
-            1 => {
-                let request_verification = self.parent.lock().unwrap().request_verification.as_ref().unwrap();
-                thread::spawn(move || request_verification.process(service, subtype, data, node_id));
-            }
-            3 => {
-                let housekeeping = self.parent.lock().unwrap().housekeeping.as_ref().unwrap();
-                thread::spawn(move || housekeeping.process(service, subtype, data, node_id));
-            }
-            8 => {
-                let function_management = self.parent.lock().unwrap().function_management.as_ref().unwrap();
-                thread::spawn(move || function_management.process(service, subtype, data, node_id));
-            }
-            17 => {
-                let test = self.parent.lock().unwrap().test.as_ref().unwrap();
-                thread::spawn(move || test.process(service, subtype, data, node_id));
-            }
-            20 => {
-                let parameter_management = self.parent.lock().unwrap().parameter_management.as_ref().unwrap();
-                thread::spawn(move || parameter_management.process(service, subtype, data, node_id));
-            }
-            _ => {}
-        }
-    }
+    };
 }
 
-// Placeholder structs for service controllers
-struct RequestVerificationServiceController;
-impl RequestVerificationServiceController {
-    fn new(_parent: PacketUtilizationServiceController) -> Self {
-        Self
-    }
-}
-
-struct HousekeepingServiceController;
-impl HousekeepingServiceController {
-    fn new(_parent: PacketUtilizationServiceController) -> Self {
-        Self
-    }
-}
-
-struct FunctionManagementServiceController;
-impl FunctionManagementServiceController {
-    fn new(_parent: PacketUtilizationServiceController) -> Self {
-        Self
-    }
-}
-
-struct TestServiceController;
-impl TestServiceController {
-    fn new(_parent: PacketUtilizationServiceController) -> Self {
-        Self
-    }
-}
-
-struct ParameterManagementServiceController;
-impl ParameterManagementServiceController {
-    fn new(_parent: PacketUtilizationServiceController) -> Self {
-        Self
-    }
-}
-
+// Define and implement responders
 struct RequestVerificationServiceResponder;
 impl RequestVerificationServiceResponder {
-    fn new(_parent: PacketUtilizationServiceResponder) -> Self {
+    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
         Self
     }
 }
+impl_packet_processor!(RequestVerificationServiceResponder);
 
 struct HousekeepingServiceResponder;
 impl HousekeepingServiceResponder {
-    fn new(_parent: PacketUtilizationServiceResponder) -> Self {
+    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
         Self
     }
 }
+impl_packet_processor!(HousekeepingServiceResponder);
 
 struct FunctionManagementServiceResponder;
 impl FunctionManagementServiceResponder {
-    fn new(_parent: PacketUtilizationServiceResponder) -> Self {
+    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
         Self
     }
 }
+impl_packet_processor!(FunctionManagementServiceResponder);
 
 struct TestServiceResponder;
 impl TestServiceResponder {
-    fn new(_parent: PacketUtilizationServiceResponder) -> Self {
+    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
         Self
     }
 }
+impl_packet_processor!(TestServiceResponder);
 
 struct ParameterManagementServiceResponder;
 impl ParameterManagementServiceResponder {
-    fn new(_parent: PacketUtilizationServiceResponder) -> Self {
+    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
         Self
     }
 }
+impl_packet_processor!(ParameterManagementServiceResponder);

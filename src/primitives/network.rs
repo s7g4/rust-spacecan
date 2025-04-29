@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
-use crate::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
+use super::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
+
 
 // Define a trait for Bus
 pub trait Bus {
@@ -19,14 +20,14 @@ pub struct Network<T: Bus> {
     selected_bus: Arc<Mutex<T>>, // Ensures safe concurrent access
 }
 
-impl<T: Bus> Network<T> {
+impl<T: Bus + Clone> Network<T> {
     pub fn new(parent: Arc<dyn Parent>, node_id: u32, bus_a: T, bus_b: T) -> Self {
         Network {
             parent,
             node_id,
-            bus_a,
-            bus_b,
-            selected_bus: Arc::new(Mutex::new(bus_a)), // Start with bus_a
+            bus_a: bus_a.clone(),
+            bus_b: bus_b.clone(),
+            selected_bus: Arc::new(Mutex::new(bus_a.clone())), // Start with bus_a clone
         }
     }
 
@@ -59,14 +60,15 @@ impl<T: Bus> Network<T> {
     pub fn switch_bus(&self) {
         let mut selected = self.selected_bus.lock().unwrap();
         if std::ptr::eq(&*selected, &self.bus_a) {
-            *selected = self.bus_b;
+            *selected = self.bus_b.clone();
         } else {
-            *selected = self.bus_a;
+            *selected = self.bus_a.clone();
         }
     }
 }
 
 // Assuming a Parent trait is defined somewhere
-pub trait Parent {
+pub trait Parent: Send + Sync {
     fn received_frame(&self, can_frame: CanFrame);
+    fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError>;
 }

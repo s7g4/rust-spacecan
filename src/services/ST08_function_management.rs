@@ -151,4 +151,7 @@ impl FunctionManagementServiceController {
                 let function = Function::new(function_id, function_name, arguments);
                 self.service.add_function(function);
             }
-       
+        }
+        Ok(())
+    }
+}

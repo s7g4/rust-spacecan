@@ -7,8 +7,8 @@ pub trait Bus {
     fn disconnect(&self);
     fn set_filters(&self, filters: Vec<(u32, u32)>) -> Result<(), String>;
     fn send(&self, can_frame: CanFrame) -> Result<(), String>;
-    fn start_receive(&self);
-    fn stop_receive(&self);
+    fn start_receive(&mut self);
+    fn stop_receive(&mut self);
 }
 
 // Placeholder for CanFrame struct
@@ -56,14 +56,13 @@ impl Bus for PyboardCanBus {
     fn disconnect(&self) {
         self.bus.deinit(); // Deinitialize the CAN bus
     }
-"""
-Set the filters to define which frames to be received from the bus.
-Only frames with a CAN ID that match one of the filter will be received.
-- filters (list of tuples): Filters are provided as a list of tuples containing a can_id and a mask:
-    >>> [(can_id, mask), (can_id, mask), ...]
-A received frame matches the filter when
-    (received_can_id & mask) == (can_id & mask)."""
 
+    /// Set the filters to define which frames to be received from the bus.
+    /// Only frames with a CAN ID that match one of the filter will be received.
+    /// Filters are provided as a list of tuples containing a can_id and a mask:
+    /// [(can_id, mask), (can_id, mask), ...]
+    /// A received frame matches the filter when
+    /// (received_can_id & mask) == (can_id & mask).
     fn set_filters(&self, filters: Vec<(u32, u32)>) -> Result<(), String> {
         if filters.len() > Self::TOTAL_FILTERBANKS {
             return Err("Too many filters provided".to_string());
@@ -97,20 +96,19 @@ A received frame matches the filter when
         Ok(())
     }
 
-    fn start_receive(&self) {
+    fn start_receive(&mut self) {
         self.running = true;
     }
 
-    fn stop_receive(&self) {
+    fn stop_receive(&mut self) {
         self.running = false;
     }
 }
-"""A FrameBuffer is used to buffer frames received from the Network
-over the active Bus. The FrameBuffer is designed as a FIFO and is
-useful to overcome the limited storing capability of the pyboard CAN
-controller hardware FIFO."""
 
-// FrameBuffer struct to buffer received frames
+/// A FrameBuffer is used to buffer frames received from the Network
+/// over the active Bus. The FrameBuffer is designed as a FIFO and is
+/// useful to overcome the limited storing capability of the pyboard CAN
+/// controller hardware FIFO.
 pub struct FrameBuffer {
     size: usize,
     data: Vec<[u32; 4]>, // Placeholder for frame data
@@ -132,7 +130,7 @@ impl FrameBuffer {
         let next_index = (self.index_write + 1) % self.size;
         if next_index == self.index_read {
             // Buffer overflow, discard received frames
-            bus.flush_fifo();
+            bus.bus.flush_fifo();
             println!("Frame buffer overflow");
         } else {
             // Simulate receiving a frame into the buffer
@@ -145,9 +143,15 @@ impl FrameBuffer {
         if self.index_read == self.index_write {
             return None; // Buffer is empty
         }
-        let (can_id, data) = self.data[self.index_read];
+        let frame = self.data[self.index_read];
         self.index_read = (self.index_read + 1) % self.size;
-        Some(CanFrame { can_id, data: data.to_vec() }) // Return the frame
+        let can_id = frame[0];
+        // Convert u32 slice to u8 vector
+        let mut data_bytes = Vec::with_capacity((frame.len() - 1) * 4);
+        for &word in &frame[1..] {
+            data_bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        Some(CanFrame { can_id, data: data_bytes }) // Return the frame
     }
 
     pub fn any(&self) -> bool {
@@ -172,14 +176,14 @@ impl PybCan {
     pub fn deinit(&self) {
         // Deinitialize the CAN bus
     }
-"""Callback for received frames.
-The method is called when a CAN frame is received on the bus
-that matches the filters defined for the bus. If the bus on which the
-frame was received is not the active bus (of the network) then the
-frame is discarded. Otherwise, a processing of the received frame
-is scheduled to be executed once the callback returns.
-The method raises an exception when the hardware fifo overflows."""
 
+    /// Callback for received frames.
+    /// The method is called when a CAN frame is received on the bus
+    /// that matches the filters defined for the bus. If the bus on which the
+    /// frame was received is not the active bus (of the network) then the
+    /// frame is discarded. Otherwise, a processing of the received frame
+    /// is scheduled to be executed once the callback returns.
+    /// The method raises an exception when the hardware fifo overflows.
     pub fn set_rx_callback<F>(&self, fifo: u32, callback: F)
     where
         F: Fn(u32, u32) + 'static,

@@ -1,20 +1,20 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use crate::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
-use crate::network::Network;
+use super::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
+use crate::primitives::network::Parent;
 
 const ID_HEARTBEAT: u32 = 0x700;
 
 // Timer struct to handle periodic heartbeat signals
 struct Timer {
     period: Duration,
-    callback: Box<dyn Fn() + Send + Sync>,
+    callback: Arc<dyn Fn() + Send + Sync>,
     running: Arc<Mutex<bool>>,
 }
 
 impl Timer {
-    fn new(period: Duration, callback: Box<dyn Fn() + Send + Sync>) -> Self {
+    fn new(period: Duration, callback: Arc<dyn Fn() + Send + Sync>) -> Self {
         Timer {
             period,
             callback,
@@ -24,7 +24,8 @@ impl Timer {
 
     fn start(&self) {
         let running = Arc::clone(&self.running);
-        let callback = self.callback.clone();
+        let callback = Arc::clone(&self.callback);
+        let period = self.period;
         *running.lock().unwrap() = true;
 
         thread::spawn(move || {
@@ -42,7 +43,7 @@ impl Timer {
 
 // HeartbeatProducer struct to send periodic heartbeats
 pub struct HeartbeatProducer {
-    parent: Arc<dyn Network>,
+    parent: Arc<dyn Parent>,
     running: bool,
     timer: Option<Timer>,
     period: Option<Duration>,
@@ -50,7 +51,7 @@ pub struct HeartbeatProducer {
 }
 
 impl HeartbeatProducer {
-    pub fn new(parent: Arc<dyn Network>) -> Result<Self, CanFrameError> {
+    pub fn new(parent: Arc<dyn Parent>) -> Result<Self, CanFrameError> {
         let can_frame = CanFrame::new(ID_HEARTBEAT, None)?;
         Ok(HeartbeatProducer {
             parent,
@@ -74,7 +75,7 @@ impl HeartbeatProducer {
         let parent_clone = Arc::clone(&self.parent);
         let frame_clone = self.can_frame.clone();
 
-        let timer = Timer::new(period, Box::new(move || {
+        let timer = Timer::new(period, Arc::new(move || {
             let _ = parent_clone.send(&frame_clone);
         }));
         self.timer = Some(timer);
@@ -114,5 +115,20 @@ impl HeartbeatConsumer {
             return last.elapsed() > self.timeout;
         }
         true
+    }
+}
+
+// Added Heartbeat struct for main.rs usage
+pub struct Heartbeat {
+    pub uptime: u32,
+    pub status: u8,
+}
+
+impl Heartbeat {
+    pub fn to_payload(&self) -> Vec<u8> {
+        let mut payload = Vec::new();
+        payload.extend(&self.uptime.to_be_bytes());
+        payload.push(self.status);
+        payload
     }
 }

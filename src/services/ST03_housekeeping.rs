@@ -126,8 +126,14 @@ impl HousekeepingServiceController {
     fn process(&self, service: u32, subtype: u32, data: Vec<u8>, node_id: u32) {
         let case = (service, subtype);
         if case == (3, 25) {
-            let report_id = (node_id, data[0]);
+            let report_id = (node_id, data[0] as u32);
             let data = &data[1..];
             if let Some(housekeeping_report) = self.service.get_housekeeping_report(report_id) {
                 let decoded_data = housekeeping_report.decode(data);
-                let mut report = HashMap::new();
+                let mut report: std::collections::HashMap<String, f64> = HashMap::new();
+
+                // Assuming decoded_data and report are used here, add closing braces
+            }
+        }
+    }
+}

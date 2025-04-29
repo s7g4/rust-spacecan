@@ -94,10 +94,20 @@ impl CanFrame {
         
         CanFrame::new(can_id, Some(data))
     }
+
+    // Public getter for can_id
+    pub fn can_id(&self) -> u32 {
+        self.can_id
+    }
+
+    // Public getter for data
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
 }
 
 // Example usage
-def main() {
+fn main() {
     match CanFrame::new(ID_SYNC, Some(vec![1, 2, 3, 4, 5])) {
         Ok(can_frame) => {
             println!("{:?}", can_frame);

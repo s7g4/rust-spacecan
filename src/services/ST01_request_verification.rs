@@ -9,16 +9,18 @@ impl Packet {
     }
 }
 
-trait Parent {
+use std::sync::Arc;
+
+trait Parent: Send + Sync {
     fn send(&self, packet: Packet);
 }
 
 struct RequestVerificationServiceController {
-    parent: Box<dyn Parent>,
+    parent: Arc<dyn Parent>,
 }
 
 impl RequestVerificationServiceController {
-    fn new(parent: Box<dyn Parent>) -> Self {
+    fn new(parent: Arc<dyn Parent>) -> Self {
         RequestVerificationServiceController { parent }
     }
 
@@ -53,11 +55,11 @@ impl RequestVerificationServiceController {
 }
 
 struct RequestVerificationServiceResponder {
-    parent: Box<dyn Parent>,
+    parent: Arc<dyn Parent>,
 }
 
 impl RequestVerificationServiceResponder {
-    fn new(parent: Box<dyn Parent>) -> Self {
+    fn new(parent: Arc<dyn Parent>) -> Self {
         RequestVerificationServiceResponder { parent }
     }
 
@@ -100,9 +102,10 @@ impl Parent for ExampleParent {
 }
 
 fn main() {
-    let parent: Box<dyn Parent> = Box::new(ExampleParent);
+    use std::sync::Arc;
+    let parent: Arc<dyn Parent> = Arc::new(ExampleParent);
     let controller = RequestVerificationServiceController::new(parent.clone());
-    let responder = RequestVerificationServiceResponder::new(parent);
+    let responder = RequestVerificationServiceResponder::new(parent.clone());
 
     // Example usage
     let data = vec![0, 1]; // Example data

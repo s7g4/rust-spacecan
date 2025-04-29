@@ -1,8 +1,8 @@
-use rust_spacecan::frame::Frame;
-use rust_spacecan::parser::{decode_frame, encode_frame};
-use rust_spacecan::protocol::heartbeat::Heartbeat;
-use rust_spacecan::protocol::sts::{Sts, StsType};
-use rust_spacecan::transport::mock::MockTransport;
+use space_can::primitives::can_frame::CanFrame;
+use space_can::parser::{decode_frame, encode_frame};
+use space_can::primitives::heartbeat::Heartbeat;
+// Removed import of primitives::sts as it does not exist
+use space_can::transport::mock::MockTransport;
 
 fn main() {
     // Initialize mock transport
@@ -15,12 +15,7 @@ fn main() {
     };
 
     let hb_payload = heartbeat.to_payload();
-    let hb_frame = Frame {
-        source: 1,
-        destination: 2,
-        msg_type: rust_spacecan::protocol::types::MessageType::Heartbeat,
-        payload: hb_payload,
-    };
+    let hb_frame = CanFrame::new(0x700, Some(hb_payload)).expect("Failed to create CanFrame");
 
     let hb_encoded = encode_frame(&hb_frame).expect("Encoding heartbeat failed");
     println!("Encoded Heartbeat Frame: {:?}", hb_encoded);
@@ -33,6 +28,8 @@ fn main() {
     println!("Received Frame from Mock Transport: {:?}", received);
 
     // === 2. STS Frame (e.g., Ping) ===
+    // Since primitives::sts does not exist, this part is commented out or needs implementation
+    /*
     let sts = Sts {
         subsystem: 1,
         command: StsType::Ping as u8,
@@ -40,12 +37,7 @@ fn main() {
     };
 
     let sts_payload = sts.to_payload();
-    let sts_frame = Frame {
-        source: 1,
-        destination: 2,
-        msg_type: rust_spacecan::protocol::types::MessageType::Sts,
-        payload: sts_payload,
-    };
+    let sts_frame = CanFrame::new(0x380, Some(sts_payload)).expect("Failed to create CanFrame");
 
     let sts_encoded = encode_frame(&sts_frame).expect("Encoding STS failed");
     println!("\nEncoded STS Frame: {:?}", sts_encoded);
@@ -56,4 +48,5 @@ fn main() {
     transport.send(&sts_encoded);
     let received_sts = transport.receive().expect("No STS frame received");
     println!("Received STS Frame from Mock Transport: {:?}", received_sts);
+    */
 }

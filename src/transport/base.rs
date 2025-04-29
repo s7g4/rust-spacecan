@@ -1,4 +1,4 @@
-use crate::can_frame::{CanFrame, CanFrameError};
+use crate::primitives::can_frame::{CanFrame, CanFrameError};
 use std::sync::{Arc, Mutex};
 
 // Define a trait for Bus operations

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::can_frame::{CanFrame, CanFrameError};
+use super::can_frame::{CanFrame, CanFrameError};
 
 const MAX_DATA_LENGTH: usize = 6;
 
@@ -41,11 +41,11 @@ impl PacketAssembler {
     }
 
     pub fn process_frame(&mut self, can_frame: CanFrame) -> Option<Packet> {
-        let can_id = can_frame.can_id;
-        let total_frames = can_frame.data.get(0)? + 1;
-        let frame_index = can_frame.data.get(1)?;
+        let can_id = can_frame.can_id();
+        let total_frames = can_frame.data().get(0).copied()? + 1;
+        let frame_index = can_frame.data().get(1).copied()?;
         
-        self.buffer.entry(can_id).or_default().insert(*frame_index, can_frame.data[2..].to_vec());
+        self.buffer.entry(can_id).or_default().insert(frame_index, can_frame.data()[2..].to_vec());
         
         if self.buffer[&can_id].len() == total_frames as usize {
             let mut data = Vec::new();

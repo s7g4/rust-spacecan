@@ -5,13 +5,13 @@ use std::time::{Duration, Instant};
 // Timer struct to handle periodic execution
 pub struct Timer {
     period: Duration,
-    callback: Box<dyn Fn() + Send + Sync>,
+    callback: Arc<dyn Fn() + Send + Sync>,
     running: Arc<Mutex<bool>>,
     last_execution: Arc<Mutex<Option<Instant>>>,
 }
 
 impl Timer {
-    pub fn new(period: Duration, callback: Box<dyn Fn() + Send + Sync>) -> Self {
+    pub fn new(period: Duration, callback: Arc<dyn Fn() + Send + Sync>) -> Self {
         Timer {
             period,
             callback,
@@ -22,13 +22,14 @@ impl Timer {
 
     pub fn start(&self) {
         let running = Arc::clone(&self.running);
-        let callback = self.callback.clone();
+        let callback = Arc::clone(&self.callback);
         let last_execution = Arc::clone(&self.last_execution);
+        let period = self.period;
         *running.lock().unwrap() = true;
 
         thread::spawn(move || {
             while *running.lock().unwrap() {
-                thread::sleep(self.period);
+                thread::sleep(period);
                 callback();
                 *last_execution.lock().unwrap() = Some(Instant::now());
             }

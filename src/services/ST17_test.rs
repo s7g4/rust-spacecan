@@ -105,3 +105,22 @@ impl TestServiceResponder {
                 } else {
                     // Send fail completion report
                     self.parent.request_verification().send_fail_completion_report(&[service as u8, subtype as u8]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn send_connection_test_report(&self) {
+        // To be implemented
+    }
+
+    fn send_application_connection_test_report(&self, apid: u8) {
+        // To be implemented
+    }
+
+    fn received_application_connection_test(&self, apid: u8) -> bool {
+        // To be implemented
+        true
+    }
+}

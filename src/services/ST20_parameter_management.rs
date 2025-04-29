@@ -131,4 +131,15 @@ impl ParameterManagementServiceController {
         if let Some(list_of_dicts) = json["parameters"].as_array() {
             for param in list_of_dicts {
                 let parameter_id = (node_id, param["parameter_id"].as_u64().unwrap() as u32);
-                let parameter_name = param["parameter_name"].as_str().unwrap().to
+                let parameter_name = param["parameter_name"].as_str().unwrap().to_string();
+
+                let encoding = param["encoding"].as_str().unwrap().to_string();
+                let value = 0.0; // Default value, can be updated later
+
+                let parameter = Parameter::new(parameter_id, parameter_name, encoding, value);
+                self.service.add_parameter(parameter);
+            }
+        }
+        Ok(())
+    }
+}

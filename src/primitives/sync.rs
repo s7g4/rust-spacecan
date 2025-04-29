@@ -1,20 +1,20 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use crate::can_frame::{CanFrame, CanFrameError};
-use crate::network::Network;
+use super::can_frame::{CanFrame, CanFrameError};
+use crate::primitives::network::Parent;
 
 const ID_SYNC: u32 = 0x080;
 
 // Timer struct for periodic sync frame transmission
 struct Timer {
     period: Duration,
-    callback: Box<dyn Fn() + Send + Sync>,
+    callback: Arc<dyn Fn() + Send + Sync>,
     running: Arc<Mutex<bool>>,
 }
 
 impl Timer {
-    fn new(period: Duration, callback: Box<dyn Fn() + Send + Sync>) -> Self {
+    fn new(period: Duration, callback: Arc<dyn Fn() + Send + Sync>) -> Self {
         Timer {
             period,
             callback,
@@ -24,7 +24,8 @@ impl Timer {
 
     fn start(&self) {
         let running = Arc::clone(&self.running);
-        let callback = self.callback.clone();
+        let callback = Arc::clone(&self.callback);
+        let period = self.period;
         *running.lock().unwrap() = true;
 
         thread::spawn(move || {
@@ -42,7 +43,7 @@ impl Timer {
 
 // SyncProducer struct to send periodic synchronization frames
 pub struct SyncProducer {
-    parent: Arc<dyn Network>,
+    parent: Arc<dyn Parent>,
     running: bool,
     timer: Option<Timer>,
     period: Option<Duration>,
@@ -50,7 +51,7 @@ pub struct SyncProducer {
 }
 
 impl SyncProducer {
-    pub fn new(parent: Arc<dyn Network>) -> Result<Self, CanFrameError> {
+    pub fn new(parent: Arc<dyn Parent>) -> Result<Self, CanFrameError> {
         let can_frame = CanFrame::new(ID_SYNC, None)?;
         Ok(SyncProducer {
             parent,
@@ -74,7 +75,7 @@ impl SyncProducer {
         let parent_clone = Arc::clone(&self.parent);
         let frame_clone = self.can_frame.clone();
 
-        let timer = Timer::new(period, Box::new(move || {
+        let timer = Timer::new(period, Arc::new(move || {
             let _ = parent_clone.send(&frame_clone);
         }));
         self.timer = Some(timer);
