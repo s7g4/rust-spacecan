@@ -1,7 +1,8 @@
 /// # SpaceCAN - CAN Frame Module
-/// 
+///
 /// This module defines the CAN frame structure used in the SpaceCAN protocol.
 /// It includes functions for creating, encoding, and decoding CAN frames.
+
 use thiserror::Error;
 
 /// The maximum length of a CAN frame's data payload (8 bytes).
@@ -29,6 +30,7 @@ pub enum CanFrameError {
     #[error("Invalid CAN ID: {0}")]
     InvalidCanId(u32),
 }
+
 /// Represents a CAN frame used in SpaceCAN communication.
 #[derive(Debug, Clone)]
 pub struct CanFrame {
@@ -40,73 +42,78 @@ pub struct CanFrame {
 
 impl CanFrame {
     /// Creates a new CAN frame with validation.
-    /// 
+    ///
     /// # Arguments
     /// * `can_id` - The identifier for the CAN frame (must be 11-bit).
     /// * `data` - An optional payload (max 8 bytes).
-    /// 
+    ///
     /// # Returns
     /// * `Ok(CanFrame)` if valid, otherwise `CanFrameError`.
-    // Constructor for CanFrame with validation
     pub fn new(can_id: u32, data: Option<Vec<u8>>) -> Result<Self, CanFrameError> {
         if can_id > FULL_MASK {
             return Err(CanFrameError::InvalidCanId(can_id));
         }
-        
+
         let data = data.unwrap_or_else(Vec::new);
         if data.len() > MAX_DATA_LENGTH {
             return Err(CanFrameError::DataTooLong);
         }
-        
+
         Ok(CanFrame { can_id, data })
     }
 
-    // Get the length of the data
+    /// Returns the length of the data payload.
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
-    // Get the node ID
+    /// Returns the node ID extracted from the CAN ID.
     pub fn get_node_id(&self) -> u32 {
         self.can_id & NODE_MASK
     }
 
-    // Get the function ID
+    /// Returns the function ID extracted from the CAN ID.
     pub fn get_func_id(&self) -> u32 {
         (self.can_id & FUNCTION_MASK) >> 7 // Shift right to get meaningful value
     }
-    
-    // Convert to byte representation
+
+    /// Converts the CAN frame to its byte representation.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut frame_bytes = vec![(self.can_id >> 3) as u8, (self.can_id & 0x07) as u8];
         frame_bytes.extend_from_slice(&self.data);
         frame_bytes
     }
-    
-    // Create CanFrame from bytes
+
+    /// Creates a CAN frame from a byte slice.
+    ///
+    /// # Arguments
+    /// * `bytes` - Byte slice representing the CAN frame.
+    ///
+    /// # Returns
+    /// * `Ok(CanFrame)` if successful, otherwise `CanFrameError`.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, CanFrameError> {
         if bytes.len() < 2 {
             return Err(CanFrameError::InvalidCanId(0));
         }
-        
+
         let can_id = ((bytes[0] as u32) << 3) | (bytes[1] as u32 & 0x07);
         let data = bytes[2..].to_vec();
-        
+
         CanFrame::new(can_id, Some(data))
     }
 
-    // Public getter for can_id
+    /// Returns the CAN ID.
     pub fn can_id(&self) -> u32 {
         self.can_id
     }
 
-    // Public getter for data
+    /// Returns a reference to the data payload.
     pub fn data(&self) -> &Vec<u8> {
         &self.data
     }
 }
 
-// Example usage
+// Example usage demonstrating creation and inspection of a CAN frame.
 fn main() {
     match CanFrame::new(ID_SYNC, Some(vec![1, 2, 3, 4, 5])) {
         Ok(can_frame) => {

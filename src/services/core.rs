@@ -1,22 +1,30 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-// Define a trait for packet processing
+/// Trait for processing packets.
 trait PacketProcessor {
+    /// Processes a packet with given service, subtype, data, and node ID.
     fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32);
 }
 
-// Define the PacketUtilizationService struct
+/// Service managing packet utilization and dispatching to responders.
 struct PacketUtilizationService {
+    /// Optional packet monitor callback.
     packet_monitor: Option<Arc<dyn Fn(u8, u8, Vec<u8>, u32) + Send + Sync>>,
+    /// Optional request verification responder.
     request_verification: Option<Arc<RequestVerificationServiceResponder>>,
+    /// Optional housekeeping responder.
     housekeeping: Option<Arc<HousekeepingServiceResponder>>,
+    /// Optional function management responder.
     function_management: Option<Arc<FunctionManagementServiceResponder>>,
+    /// Optional test responder.
     test: Option<Arc<TestServiceResponder>>,
+    /// Optional parameter management responder.
     parameter_management: Option<Arc<ParameterManagementServiceResponder>>,
 }
 
 impl PacketUtilizationService {
+    /// Creates a new PacketUtilizationService with no responders.
     fn new() -> Self {
         Self {
             packet_monitor: None,
@@ -29,7 +37,7 @@ impl PacketUtilizationService {
     }
 }
 
-// Define the PacketUtilizationServiceController struct
+/// Controller for PacketUtilizationService managing packet reception.
 struct PacketUtilizationServiceController {
     parent: Arc<Mutex<PacketUtilizationService>>,
 }
@@ -43,6 +51,7 @@ impl Clone for PacketUtilizationServiceController {
 }
 
 impl PacketUtilizationServiceController {
+    /// Creates a new controller and initializes responders.
     fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
         let controller = Self { parent: parent.clone() };
 
@@ -58,6 +67,7 @@ impl PacketUtilizationServiceController {
         controller
     }
 
+    /// Handles a received packet by dispatching to appropriate responder.
     fn received_packet(&self, data: Vec<u8>, node_id: u32) {
         if data.len() < 2 {
             eprintln!("Invalid packet: insufficient data");
@@ -68,21 +78,21 @@ impl PacketUtilizationServiceController {
         let subtype = data[1];
         let payload = data[2..].to_vec();
 
-        // Handle packet monitor
+        // Invoke packet monitor callback if set.
         if let Some(monitor) = self.parent.lock().unwrap().packet_monitor.clone() {
             monitor(service, subtype, payload.clone(), node_id);
         }
 
-        // Extract service responders
+        // Extract service responders.
         let parent = self.parent.lock().unwrap();
         let request_verification = parent.request_verification.clone();
         let housekeeping = parent.housekeeping.clone();
         let function_management = parent.function_management.clone();
         let test = parent.test.clone();
         let parameter_management = parent.parameter_management.clone();
-        drop(parent); // Release lock early
+        drop(parent); // Release lock early.
 
-        // Match service and spawn threads
+        // Dispatch to appropriate responder in a new thread.
         match service {
             1 => {
                 if let Some(rv) = request_verification {
@@ -121,18 +131,19 @@ impl PacketUtilizationServiceController {
     }
 }
 
-// Define the PacketUtilizationServiceResponder struct
+/// Responder for PacketUtilizationService.
 struct PacketUtilizationServiceResponder {
     parent: Arc<Mutex<PacketUtilizationService>>,
 }
 
 impl PacketUtilizationServiceResponder {
+    /// Creates a new responder.
     fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
         Self { parent }
     }
 }
 
-// Implement PacketProcessor for all responders
+/// Macro to implement PacketProcessor trait for responders.
 macro_rules! impl_packet_processor {
     ($responder:ident) => {
         impl PacketProcessor for $responder {
@@ -150,7 +161,7 @@ macro_rules! impl_packet_processor {
     };
 }
 
-// Define and implement responders
+/// RequestVerificationServiceResponder implementation.
 struct RequestVerificationServiceResponder;
 impl RequestVerificationServiceResponder {
     fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
@@ -159,6 +170,7 @@ impl RequestVerificationServiceResponder {
 }
 impl_packet_processor!(RequestVerificationServiceResponder);
 
+/// HousekeepingServiceResponder implementation.
 struct HousekeepingServiceResponder;
 impl HousekeepingServiceResponder {
     fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
@@ -167,6 +179,7 @@ impl HousekeepingServiceResponder {
 }
 impl_packet_processor!(HousekeepingServiceResponder);
 
+/// FunctionManagementServiceResponder implementation.
 struct FunctionManagementServiceResponder;
 impl FunctionManagementServiceResponder {
     fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
@@ -175,6 +188,7 @@ impl FunctionManagementServiceResponder {
 }
 impl_packet_processor!(FunctionManagementServiceResponder);
 
+/// TestServiceResponder implementation.
 struct TestServiceResponder;
 impl TestServiceResponder {
     fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
@@ -183,6 +197,7 @@ impl TestServiceResponder {
 }
 impl_packet_processor!(TestServiceResponder);
 
+/// ParameterManagementServiceResponder implementation.
 struct ParameterManagementServiceResponder;
 impl ParameterManagementServiceResponder {
     fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
