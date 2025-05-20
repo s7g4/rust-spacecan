@@ -1,0 +1,18 @@
+[package]
+name = "spacecan-firmware"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+panic-halt = "0.2"                        # Use panic_semihosting if you simulate with Renode
+embedded-hal = "0.2"
+nb = "1.0"
+stm32f7xx-hal = { version = "0.5.0", features = ["stm32f767", "rt"] }
+
+# SpaceCAN crate — local path or git-based
+spacecan = { git = "https://github.com/s7g4/rust-spacecan" }
+
+[package.metadata.cortex-m-rt]
+memory.x = "memory.x"

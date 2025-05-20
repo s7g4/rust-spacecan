@@ -1,0 +1,13 @@
+[package]
+name = "space_can"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1.0"
+thiserror = "1.0"
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+embedded-hal = "0.2"
+nb = "1.0"
+stm32f7xx-hal = { version = "0.5", features = ["stm32f767"] }
