@@ -1,6 +1,19 @@
-use std::sync::{Arc, Mutex};
+
+
+extern crate alloc;
+
+use alloc::sync::Arc;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
+#[cfg(not(feature = "std"))]
+use cortex_m::interrupt::Mutex;
+
+use core::time::Duration;
+#[cfg(feature = "std")]
 use std::thread;
-use std::time::Duration;
+#[cfg(feature = "std")]
+use std::time::Instant;
+
 use super::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
 use crate::primitives::network::Parent;
 
@@ -24,23 +37,35 @@ impl Timer {
     }
 
     /// Starts the timer, invoking the callback periodically.
+    #[cfg(feature = "std")]
     fn start(&self) {
         let running = Arc::clone(&self.running);
         let callback = Arc::clone(&self.callback);
         let period = self.period;
         *running.lock().unwrap() = true;
 
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             while *running.lock().unwrap() {
-                thread::sleep(period);
+                std::thread::sleep(period);
                 callback();
             }
         });
     }
 
+    #[cfg(not(feature = "std"))]
+    fn start(&self) {
+        // No-op or alternative implementation for no_std
+    }
+
     /// Stops the timer.
+    #[cfg(feature = "std")]
     fn stop(&self) {
         *self.running.lock().unwrap() = false;
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn stop(&self) {
+        // no_std alternative implementation if needed
     }
 }
 
@@ -99,7 +124,10 @@ impl HeartbeatProducer {
 
 /// HeartbeatConsumer struct to monitor received heartbeats.
 pub struct HeartbeatConsumer {
-    last_received: Arc<Mutex<Option<std::time::Instant>>>,
+    #[cfg(feature = "std")]
+    last_received: Arc<Mutex<Option<Instant>>>,
+    #[cfg(not(feature = "std"))]
+    last_received: Arc<Mutex<Option<()>>>,
     timeout: Duration,
 }
 
@@ -107,23 +135,39 @@ impl HeartbeatConsumer {
     /// Creates a new HeartbeatConsumer with the specified timeout.
     pub fn new(timeout: Duration) -> Self {
         HeartbeatConsumer {
+            #[cfg(feature = "std")]
+            last_received: Arc::new(Mutex::new(None)),
+            #[cfg(not(feature = "std"))]
             last_received: Arc::new(Mutex::new(None)),
             timeout,
         }
     }
 
     /// Records the receipt of a heartbeat.
+    #[cfg(feature = "std")]
     pub fn receive_heartbeat(&self) {
         let mut last_received = self.last_received.lock().unwrap();
-        *last_received = Some(std::time::Instant::now());
+        *last_received = Some(Instant::now());
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub fn receive_heartbeat(&self) {
+        // No-op or alternative implementation for no_std
     }
 
     /// Checks if the heartbeat has timed out.
+    #[cfg(feature = "std")]
     pub fn check_timeout(&self) -> bool {
         let last_received = self.last_received.lock().unwrap();
         if let Some(last) = *last_received {
             return last.elapsed() > self.timeout;
         }
+        true
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub fn check_timeout(&self) -> bool {
+        // Always timeout in no_std or implement alternative logic
         true
     }
 }
@@ -136,8 +180,8 @@ pub struct Heartbeat {
 
 impl Heartbeat {
     /// Converts the Heartbeat struct to a payload byte vector.
-    pub fn to_payload(&self) -> Vec<u8> {
-        let mut payload = Vec::new();
+    pub fn to_payload(&self) -> alloc::vec::Vec<u8> {
+        let mut payload = alloc::vec::Vec::new();
         payload.extend(&self.uptime.to_be_bytes());
         payload.push(self.status);
         payload

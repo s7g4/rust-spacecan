@@ -1,0 +1,11 @@
+mach create "STM32F4Discovery"
+
+machine LoadPlatformDescription @./stm32f4_discovery.repl
+
+# Enable UART output to terminal
+showAnalyzer sysbus.uart2
+
+# Load the Rust-compiled ELF firmware
+sysbus LoadELF @/home/shaurya/Desktop/rust-spacecan/target/thumbv7em-none-eabihf/release/firmware
+
+start

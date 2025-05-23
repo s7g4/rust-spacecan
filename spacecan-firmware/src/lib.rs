@@ -7,10 +7,13 @@ use panic_halt as _;
 use stm32f7xx_hal::{
     pac,
     prelude::*,
-    can::Can,
+    gpio::{Alternate},
+    can::Can as HalCan,
 };
+use bxcan::{Can, filter::{Mask32, BankConfig}, Fifo};
+use fugit::HertzU32;
 
-use spacecan::{SpaceCANFrame, SpaceCAN};
+use spacecan::protocol::{SpaceCAN, SpaceCANFrame};
 
 #[entry]
 fn main() -> ! {
@@ -18,18 +21,27 @@ fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
     let cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
-    let rcc = dp.RCC.constrain();
-    let clocks = rcc.cfgr.sysclk(216.mhz()).freeze();
+    let mut rcc = dp.RCC.constrain(); // Make rcc mutable
+    let clocks = rcc.cfgr.sysclk(HertzU32::from_raw(216_000_000)).freeze();
 
     let gpio = dp.GPIOB.split(); // CAN is on PB8 (RX), PB9 (TX) for F767
-    let can_rx = gpio.pb8.into_alternate();
-    let can_tx = gpio.pb9.into_alternate();
+    let can_rx = gpio.pb8.into_alternate::<9>();
+    let can_tx = gpio.pb9.into_alternate::<9>();
 
-    let mut can = Can::new(dp.CAN1, (can_tx, can_rx));
-    can.modify_filters().enable_bank(0, |bank| {
-        bank.enable().set_filter_id(0x123);
-    });
-    can.enable();
+    // Initialize the CAN peripheral using stm32f7xx-hal
+    let mut hal_can = HalCan::new(dp.CAN1, &mut rcc.apb1, (can_tx, can_rx));
+
+    // Enable the CAN clock
+    let mut can = bxcan::Can::builder(hal_can)
+        .set_bit_timing(0x001c_0000) // Example bit timing configuration
+        .enable();
+
+    // Configure CAN filters
+    can.modify_filters().enable_bank(
+        0,
+        Fifo::Fifo0,
+        BankConfig::Mask32(Mask32::accept_all()),
+    );
 
     let mut spacecan = SpaceCAN::new(can);
 

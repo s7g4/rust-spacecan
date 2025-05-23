@@ -1,3 +1,0 @@
-{closure@src/primitives/sync.rs:78:49: 78:56}
-Box<{closure@src/primitives/sync.rs:78:49: 78:56}>
-Box<(dyn Fn() + Send + Sync + 'static)>

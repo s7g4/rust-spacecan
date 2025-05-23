@@ -3,16 +3,31 @@ name = "spacecan-firmware"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "firmware"
+path = "src/main.rs"
+
+[profile.release]
+strip = "debuginfo"
+
+[[example]]
+name = "firmware"
+path = "examples/firmware.rs"
+
+strip = "debuginfo"
+build-std = ["core", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]
+
 [dependencies]
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
-panic-halt = "0.2"                        # Use panic_semihosting if you simulate with Renode
+panic-halt = "0.2"
 embedded-hal = "0.2"
 nb = "1.0"
-stm32f7xx-hal = { version = "0.5.0", features = ["stm32f767", "rt"] }
-
-# SpaceCAN crate — local path or git-based
-spacecan = { git = "https://github.com/s7g4/rust-spacecan" }
+stm32f7xx-hal = { version = "0.8", features = ["stm32f767", "has-can"] }
+spacecan = { path = "../spacecan" }
+bxcan = "0.7"
+fugit = "0.3"
 
 [package.metadata.cortex-m-rt]
 memory.x = "memory.x"

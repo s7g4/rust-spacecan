@@ -1,134 +1,201 @@
-# 🚀 SpaceCAN - Rust Implementation for LibreCube
+# Rust SpaceCAN
 
-## **🔹 About SpaceCAN**
-SpaceCAN is a communication protocol designed for **small spacecraft systems**. It provides a **lightweight, reliable, and efficient** way to exchange commands and telemetry data between subsystems in space applications.
+## Overview
 
-This repository contains a **Rust-based implementation** of the SpaceCAN protocol for **LibreCube**, aiming to support embedded systems and spacecraft communications.
+Rust SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Network) protocol stack and firmware for embedded systems. It consists of two main crates:
 
----
+- `spacecan`: A no_std Rust library providing CAN frame encoding, decoding, and protocol services.
+- `spacecan-firmware`: Minimal firmware targeting STM32F4Discovery hardware, designed for simulation with Renode.
 
-## **✨ Features**
-✅ Implements SpaceCAN protocol in Rust  
-✅ Supports CAN communication for spacecraft systems  
-✅ Efficient message handling with low-latency  
-✅ Concurrency support using `std::sync::Mutex`  
-✅ Error handling using `thiserror` for robustness  
-✅ Embedded-friendly design (no_std compatible)  
-✅ Unit-tested for reliability  
-✅ Benchmarked for performance  
+The project aims to provide a robust, embedded-friendly CAN protocol implementation with simulation support.
 
----
+## Workspace Structure
 
-## **📌 Project Structure**
-```
-SpaceCAN/
-│-- src/
-│   ├── primitives/       # Core communication components
-│   │   ├── can_frame.rs        # CAN Frame struct & serialization
-│   │   ├── heartbeat.rs        # Heartbeat signal processing
-│   │   ├── network.rs          # CAN network handling
-│   │   ├── packet.rs           # Packet fragmentation & reassembly
-│   │   ├── sync.rs             # Sync message handling
-│   │   ├── timer.rs            # Periodic task scheduling
-│   ├── services/        # Service layer components
-│   │   ├── core.rs              # Packet routing & processing
-│   │   ├── ST01_request_verification.rs  # Request verification
-│   │   ├── ST03_housekeeping.rs          # Housekeeping service
-│   │   ├── ST08_function_management.rs   # Function management
-│   │   ├── ST17_test.rs                  # System test service
-│   │   ├── ST20_parameter_management.rs  # Parameter management
-│   ├── transport/       # Low-level transport layer
-│   │   ├── base.rs              # Bus implementation
-│   │   ├── frame_buffer.rs       # Frame buffering
-│-- tests/           # Unit test suite
-│   ├── test_base.rs         # Unit tests for Bus implementation
-│   ├── test_can_frame.rs    # Unit tests for CAN frames
-│   ├── test_core.rs         # Unit tests for packet processing
-│   ├── test_heartbeat.rs    # Unit tests for heartbeat service
-│   ├── test_packet.rs       # Unit tests for packet fragmentation
-│   ├── test_sync.rs         # Unit tests for sync processing
-│   ├── test_timer.rs        # Unit tests for timer module
-│-- examples/                     # Example implementations
-│   ├── simple_send.rs            # Basic CAN send example
-│   ├── simple_receive.rs         # Basic CAN receive example
-│   ├── heartbeat_monitor.rs      # Example monitoring heartbeat
-│-- docs/                     # Example implementations
-│   ├── ECSS-E-ST-50-15C.pdf      # File on CAN system
-│   ├── ECSS-E-ST-70-41C(15April2016).pdf         # Updated file on CAN system
-│-- README.md               # Project documentation
-│-- CONTRIBUTING.md         # Contribution guidelines
-│-- LICENSE.md              # Project license
-│-- Cargo.toml              # Rust package configuration
+- `spacecan/`: Core CAN protocol library and examples.
+- `spacecan-firmware/`: Firmware implementation for STM32F4Discovery.
+- `renode/`: Renode simulation scripts for running the firmware in a virtual STM32F4Discovery environment.
 
+## Building the Project
+
+Ensure you have Rust installed with the appropriate target for embedded ARM Cortex-M:
+
+```bash
+rustup target add thumbv7em-none-eabihf
 ```
 
----
+### Build the entire workspace
 
-## **🚀 Getting Started**
+From the root directory:
 
-### **🔹 Prerequisites**
-Ensure you have the following installed:
-- Rust & Cargo (`rustc --version` to check)
-- CAN Interface (or a software CAN simulator)
-- `cargo` package manager
-
-### **🔹 Installation**
-Clone the repository and build the project:
-```sh
-git clone https://github.com/N7GG4/SpaceCAN.git
-cd SpaceCAN
+```bash
 cargo build --release
 ```
 
-### **🔹 Running the Example**
-```sh
-cargo run --example demo
+## 📌 Project Structure
+
+```
+rust-spacecan/
+|   ├──spacecan/
+│   |   ├── src/
+│   |   |   ├── primitives/       # Core communication components
+│   │   |   |   ├── can_frame.rs        # CAN Frame struct & serialization
+│   │   |   |   ├── heartbeat.rs        # Heartbeat signal processing
+│   │   |   |   ├── network.rs          # CAN network handling
+│   │   |   |   ├── packet.rs           # Packet fragmentation & reassembly
+│   │   |   |   ├── sync.rs             # Sync message handling
+│   │   |   |   ├── timer.rs            # Periodic task scheduling
+│   |   |   ├── services/        # Service layer components
+│   │   |   |   ├── core.rs              # Packet routing & processing
+│   │   |   |   ├── ST01_request_verification.rs  # Request verification
+│   │   |   |   ├── ST03_housekeeping.rs          # Housekeeping service
+│   │   |   |   ├── ST08_function_management.rs   # Function management
+│   │   |   |   ├── ST17_test.rs                  # System test service
+│   │   |   |   ├── ST20_parameter_management.rs  # Parameter management
+│   |   |   ├── transport/       # Low-level transport layer
+│   │   |   |   ├── base.rs              # Bus implementation
+│   │   |   |   ├── frame_buffer.rs       # Frame buffering
+│   |   |   ├── tests/           # Unit test suite
+│   |   |   |   ├── test_base.rs         # Unit tests for Bus implementation
+│   |   |   |   ├── test_can_frame.rs    # Unit tests for CAN frames
+│   |   |   |   ├── test_core.rs         # Unit tests for packet processing
+│   |   |   |   ├── test_heartbeat.rs    # Unit tests for heartbeat service
+│   |   |   |   ├── test_packet.rs       # Unit tests for packet fragmentation
+│   |   |   |   ├── test_sync.rs         # Unit tests for sync processing
+│   |   |   |   ├── test_timer.rs        # Unit tests for timer module
+│   |   ├── examples/                     # Example implementations
+│   |   |   ├── basic/
+|   |   |   |   ├── heartbeat_example.rs    # Basic heartbeat example
+|   |   |   |   ├── receive_can.rs          # Receive CAN example
+|   |   |   |   ├── send_can.rs             # Send CAN example
+|   |   |   |   ├── sync_example.rs         # Sync example
+|   |   |   ├── packet/
+|   |   |   |   ├── full_packet_demo.rs    # Full packet demo
+|   |   |   |   ├── reassemblepacket.rs    # Reassemble packet example
+|   |   |   |   ├── split_packet.rs    # Split packet example
+|   |   |   ├── services/
+|   |   |   |   ├── packet_service.rs   # packet service example
+|   |   |   |   ├── service_full_demo.rs    #servive full demo
+|   |   |   |   ├── service_splitter.rs    #service splitter example
+|   |   |   ├── README.md   #documentation for examples
+|   |   ├── docs/
+|   |   |   ├──ECSS-E-ST-50-15C.pdf    #ECSS standard defining CAN application layer.
+|   |   |   ├──ECSS-E-ST-70-41C(15April2016).pdf    #ECSS Telecommand/Telemetry protocol document.
+|   |   ├── target/
+|   |   |   ├── debug    #Default build output folders.
+|   |   |   ├── thumbv7em-none-eabihf    #Cross-compiled artifacts for embedded Cortex-M4 targets.
+|   |   ├── Cargo.toml    # Rust package configuration
+|   |   ├── Cargo.lock    #Lock file for dependency versions
+|   ├──spacecan-firmware/
+|   |   ├── src/
+|   |   |   ├── main.rs    #Main entry point for firmware
+|   |   |   ├── lib.rs     #Library part of firmware crate
+|   |   ├──examples/
+|   |   |   ├── firmware.rs    #Firmware example
+|   |   ├──target/
+|   |   |   ├──debug    #Default build output folders.
+|   |   |   ├──thumbv7em-none-eabihf    #Cross-compiled artifacts for embedded Cortex-M4 targets.
+|   |   |   ├──release  #release file
+|   |   ├──Cargo.lock   #Lock file for dependency versions
+|   |   ├──Cargo.toml   # Rust package configuration
+|   |   ├──memory.x     #Memory configuration file
+|   ├──renode
+|   |   ├──renode    #Exutable file
+|   |   ├──spacecan.resc    #Script to load and run the spacecan simulation in Renode.
+|   |   ├──stm32_spacecan.resc    #Configuration script to setup STM32 platform and run firmware.
+|   |   ├──stm32f4_discovery.repl    #Platform description file for STM32F4 Discovery board.
+|   ├── README.md               # Project documentation
+|   ├── CONTRIBUTING.md         # Contribution guidelines
+|   ├── LICENSE.md              # Project license
+|   ├── Cargo.toml              # Rust package configuration
+|   ├── Cargo.lock              #Lock file for dependency versions
+
 ```
 
----
+### Build individual crates
 
-## **📡 Usage**
-```rust
-use spacecan::controller::SpaceCANController;
+- Build `spacecan` library:
 
-fn main() {
-    let mut controller = SpaceCANController::new();
-    let data = [0x12, 0x34, 0x56, 0x78];
-    controller.transmit(data).unwrap();
-}
+```bash
+cargo build --release -p spacecan
 ```
 
+- Build `spacecan-firmware` firmware:
+
+```bash
+cargo build --release -p spacecan-firmware
+```
+
+## Running the Mock Example in `spacecan`
+
+The `spacecan` crate includes a mock transport example demonstrating CAN frame encoding and decoding.
+
+To run the example (requires std feature enabled):
+
+```bash
+cargo run --example heartbeat_example --features std
+```
+
+This example encodes a heartbeat CAN frame, sends it via a mock transport, and decodes it back.
+
+## Running the Firmware in Renode Simulation
+
+The firmware is designed to run on an STM32F4Discovery board simulated with Renode.
+
+### Prerequisites
+
+- Install [Renode](https://renode.io/).
+
+### Build the firmware
+
+```bash
+cargo build --release -p spacecan-firmware
+```
+
+### Run the simulation
+
+1. Open Renode.
+2. Load the platform description and firmware script:
+
+```bash
+include @renode/spacecan.resc
+```
+
+3. The script sets up the STM32F4Discovery machine, enables UART output, and loads the compiled firmware ELF from:
+
+```
+target/thumbv7em-none-eabihf/release/firmware
+```
+
+4. Start the simulation with:
+
+```bash
+start
+```
+
+You should see UART output in the Renode terminal.
+
+## Dependencies and Features
+
+- `spacecan` is a no_std crate by default, with optional `std` feature for examples and testing.
+- Uses embedded Rust crates such as `cortex-m`, `embedded-hal`, `stm32f7xx-hal`, and `bxcan`.
+- `spacecan-firmware` depends on `spacecan` and hardware abstraction layers for STM32F7 series.
+
+## Additional Notes
+
+- The project uses a linked list allocator for dynamic memory in no_std environments.
+- Panic handling is minimal and designed for embedded constraints.
+- The Renode scripts define the hardware peripherals and memory layout for simulation.
+
+## Contributing
+
+Contributions and improvements are welcome. Please follow Rust embedded best practices.
+
+## License
+
+Specify your project license here.
+
 ---
 
-## **🛠 Roadmap & Future Improvements**
-📌 Implement advanced error recovery  
-📌 Support multi-node CAN communication  
-📌 Improve efficiency with buffer optimizations  
-📌 Integrate with LibreCube’s test framework  
-📌 Migrate thread-based tasks to async Rust (`tokio`)  
+For detailed usage or developer guides, additional documentation can be added in the `docs/` directory.
 
 ---
-
-## **📜 Contributing**
-We welcome contributions! To contribute:
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature-xyz`)
-3. Commit your changes (`git commit -m "Added new feature"`)
-4. Push to your branch (`git push origin feature-xyz`)
-5. Open a Pull Request 🚀
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
----
-
-## **📄 License**
-This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md) for details.
-
----
-
-## **📢 Contact & Community**
-For questions and discussions, join the **LibreCube Community**:
-- **Website:** [LibreCube Official Site](https://librecube.gitlab.io/)
-- **Email:** shauryagaur07@gmail.com
-
-🚀 **Let's build the future of space communication together!**

@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "spacecan",
+    "spacecan-firmware"
+]
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+lto = false
+panic = "abort"
+
+
+[profile.release]
+opt-level = 3
+debug = false
+overflow-checks = true
+lto = true
+panic = "abort"

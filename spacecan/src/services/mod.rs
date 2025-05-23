@@ -1,6 +1,12 @@
+#[cfg(feature = "std")]
 pub mod core;
+#[cfg(feature = "std")]
 pub mod ST01_request_verification;
+#[cfg(feature = "std")]
 pub mod ST03_housekeeping;
+#[cfg(feature = "std")]
 pub mod ST08_function_management;
+#[cfg(feature = "std")]
 pub mod ST17_test;
+#[cfg(feature = "std")]
 pub mod ST20_parameter_management;

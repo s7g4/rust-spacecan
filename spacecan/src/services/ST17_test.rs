@@ -3,7 +3,17 @@
 /// This module defines the controller and responder for the Test Service,
 /// handling connection test packets and interaction with request verification.
 
-use std::collections::HashMap;
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use core::option::Option;
+use core::option::Option::{Some, None};
+use core::result::Result;
+use core::result::Result::{Ok, Err};
 
 /// Represents a packet with data payload.
 #[derive(Debug)]
@@ -72,12 +82,12 @@ impl TestServiceController {
     }
 
     /// Handler for received connection test report.
-    fn received_connection_test_report(&self, node_id: u32) {
+    fn received_connection_test_report(&self, _node_id: u32) {
         // To be overwritten.
     }
 
     /// Handler for received application connection test report.
-    fn received_application_connection_test_report(&self, node_id: u32, apid: u8) {
+    fn received_application_connection_test_report(&self, _node_id: u32, _apid: u8) {
         // To be overwritten.
     }
 }
@@ -94,7 +104,7 @@ impl TestServiceResponder {
     }
 
     /// Processes incoming packets based on service and subtype.
-    fn process(&self, service: u32, subtype: u32, data: Vec<u8>, node_id: u32) {
+    fn process(&self, service: u32, subtype: u32, data: Vec<u8>, _node_id: u32) {
         let case = (service, subtype);
 
         match case {
@@ -138,12 +148,12 @@ impl TestServiceResponder {
     }
 
     /// Sends an application connection test report.
-    fn send_application_connection_test_report(&self, apid: u8) {
+    fn send_application_connection_test_report(&self, _apid: u8) {
         // To be implemented.
     }
 
     /// Handles an application connection test.
-    fn received_application_connection_test(&self, apid: u8) -> bool {
+    fn received_application_connection_test(&self, _apid: u8) -> bool {
         // To be implemented.
         true
     }

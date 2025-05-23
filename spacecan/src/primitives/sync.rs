@@ -1,6 +1,19 @@
-use std::sync::{Arc, Mutex};
+
+
+extern crate alloc;
+
+use alloc::sync::Arc;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
+#[cfg(not(feature = "std"))]
+use cortex_m::interrupt::Mutex;
+
+use core::time::Duration;
+#[cfg(feature = "std")]
 use std::thread;
-use std::time::{Duration, Instant};
+#[cfg(feature = "std")]
+use std::time::Instant;
+
 use super::can_frame::{CanFrame, CanFrameError};
 use crate::primitives::network::Parent;
 
@@ -22,6 +35,7 @@ impl Timer {
         }
     }
 
+    #[cfg(feature = "std")]
     fn start(&self) {
         let running = Arc::clone(&self.running);
         let callback = Arc::clone(&self.callback);
@@ -36,8 +50,19 @@ impl Timer {
         });
     }
 
+    #[cfg(not(feature = "std"))]
+    fn start(&self) {
+        // No-op or alternative implementation for no_std
+    }
+
+    #[cfg(feature = "std")]
     fn stop(&self) {
         *self.running.lock().unwrap() = false;
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn stop(&self) {
+        // no_std alternative implementation if needed
     }
 }
 
@@ -92,28 +117,47 @@ impl SyncProducer {
 
 // SyncConsumer struct to track received sync frames
 pub struct SyncConsumer {
+    #[cfg(feature = "std")]
     last_received: Arc<Mutex<Option<Instant>>>,
+    #[cfg(not(feature = "std"))]
+    last_received: Arc<Mutex<Option<()>>>,
     timeout: Duration,
 }
 
 impl SyncConsumer {
     pub fn new(timeout: Duration) -> Self {
         SyncConsumer {
+            #[cfg(feature = "std")]
+            last_received: Arc::new(Mutex::new(None)),
+            #[cfg(not(feature = "std"))]
             last_received: Arc::new(Mutex::new(None)),
             timeout,
         }
     }
 
+    #[cfg(feature = "std")]
     pub fn receive_sync(&self) {
         let mut last_received = self.last_received.lock().unwrap();
         *last_received = Some(Instant::now());
     }
 
+    #[cfg(not(feature = "std"))]
+    pub fn receive_sync(&self) {
+        // No-op or alternative implementation for no_std
+    }
+
+    #[cfg(feature = "std")]
     pub fn check_timeout(&self) -> bool {
         let last_received = self.last_received.lock().unwrap();
         if let Some(last) = *last_received {
             return last.elapsed() > self.timeout;
         }
+        true
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub fn check_timeout(&self) -> bool {
+        // Always timeout in no_std or implement alternative logic
         true
     }
 }

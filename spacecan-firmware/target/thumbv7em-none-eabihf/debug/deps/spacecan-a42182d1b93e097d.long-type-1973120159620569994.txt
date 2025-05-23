@@ -1,0 +1,1 @@
+Result<SpaceCANFrame, <CAN as embedded_hal::can::Can>::Error>

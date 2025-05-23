@@ -1,9 +1,10 @@
-/// Request Verification Service module.
-///
-/// This module defines the controller and responder for the Request Verification Service,
-/// handling specific service and subtype packets and providing methods to send reports.
 
-use std::sync::Arc;
+extern crate alloc;
+
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::string::String;
 
 /// Represents a packet with data payload.
 #[derive(Debug)]
@@ -50,22 +51,22 @@ impl RequestVerificationServiceController {
     }
 
     /// Handler for success acceptance report.
-    fn received_success_acceptance_report(&self, node_id: u32, source_packet: &[u8]) {
+    fn received_success_acceptance_report(&self, _node_id: u32, _source_packet: &[u8]) {
         // To be overwritten.
     }
 
     /// Handler for fail acceptance report.
-    fn received_fail_acceptance_report(&self, node_id: u32, source_packet: &[u8]) {
+    fn received_fail_acceptance_report(&self, _node_id: u32, _source_packet: &[u8]) {
         // To be overwritten.
     }
 
     /// Handler for success completion report.
-    fn received_success_completion_report(&self, node_id: u32, source_packet: &[u8]) {
+    fn received_success_completion_report(&self, _node_id: u32, _source_packet: &[u8]) {
         // To be overwritten.
     }
 
     /// Handler for fail completion report.
-    fn received_fail_completion_report(&self, node_id: u32, source_packet: &[u8]) {
+    fn received_fail_completion_report(&self, _node_id: u32, _source_packet: &[u8]) {
         // To be overwritten.
     }
 }
@@ -113,26 +114,4 @@ impl RequestVerificationServiceResponder {
         packet_data.extend_from_slice(source_packet);
         self.parent.send(Packet::new(packet_data));
     }
-}
-
-/// Example implementation of the Parent trait for testing.
-struct ExampleParent;
-
-impl Parent for ExampleParent {
-    fn send(&self, packet: Packet) {
-        println!("Sending packet: {:?}", packet);
-    }
-}
-
-/// Example usage demonstrating controller and responder.
-fn main() {
-    use std::sync::Arc;
-    let parent: Arc<dyn Parent> = Arc::new(ExampleParent);
-    let controller = RequestVerificationServiceController::new(parent.clone());
-    let responder = RequestVerificationServiceResponder::new(parent.clone());
-
-    // Example usage
-    let data = vec![0, 1]; // Example data
-    controller.process(1, 1, data.clone(), 42);
-    responder.send_success_acceptance_report(&data);
 }

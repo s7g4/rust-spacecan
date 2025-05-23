@@ -1,4 +1,13 @@
+extern crate alloc;
+
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
+use alloc::vec::Vec;
+use alloc::string::ToString;
+use core::result::Result;
+use alloc::string::String;
+use core::option::Option;
+use core::option::Option::{Some, None};
+use core::result::Result::{Ok, Err};
 
 /// Decodes a CAN frame from a byte slice.
 ///

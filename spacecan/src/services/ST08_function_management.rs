@@ -1,14 +1,33 @@
-/// Function Management Service module.
-///
-/// This module defines the controller and service for the Function Management Service,
-/// managing functions and their arguments, and loading from JSON files.
 
-use serde_json::Value;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufReader};
-use std::time::{Duration, SystemTime};
-use std::sync::{Arc, Mutex};
+
+
+#[cfg(feature = "std")]
+use std::vec::Vec;
+#[cfg(feature = "std")]
+use std::string::String;
+#[cfg(feature = "std")]
+use serde_json::{from_str, to_string, Error as SerdeError};
+
+extern crate alloc;
+
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::format;
+use alloc::collections::BTreeMap;
+
+
+impl FunctionManagementService {
+    /// Creates a new function management service.
+    fn new(parent: &'static dyn Parent) -> Self {
+        FunctionManagementService {
+            parent,
+            function_pool: BTreeMap::new(),
+        }
+    }
+}
+
+use core::option::Option;
+use core::result::Result;
 
 /// Represents a packet with data payload.
 #[derive(Debug)]
@@ -48,20 +67,20 @@ impl Argument {
     }
 
     /// Encodes a value according to the argument's encoding.
-    fn encode(&self, value: f64) -> Vec<u8> {
-        let encoding = if self.encoding.starts_with("!") {
+    fn encode(&self, _value: f64) -> Vec<u8> {
+        let _encoding = if self.encoding.starts_with("!") {
             &self.encoding
         } else {
             &format!("!{}", self.encoding)
         };
         // Use the appropriate encoding logic here.
         // For demonstration, we will just return a placeholder.
-        vec![] // Placeholder for actual encoding.
+        Vec::new() // Placeholder for actual encoding.
     }
 
     /// Decodes bytes into a value according to the argument's encoding.
-    fn decode(&self, data: &[u8]) -> f64 {
-        let encoding = if self.encoding.starts_with("!") {
+    fn decode(&self, _data: &[u8]) -> f64 {
+        let _encoding = if self.encoding.starts_with("!") {
             &self.encoding
         } else {
             &format!("!{}", self.encoding)
@@ -84,7 +103,7 @@ impl Argument {
 struct Function {
     function_id: u32,
     function_name: String,
-    arguments: HashMap<u32, Argument>,
+    arguments: BTreeMap<u32, Argument>,
 }
 
 impl Function {
@@ -93,7 +112,7 @@ impl Function {
         let mut function = Function {
             function_id,
             function_name,
-            arguments: HashMap::new(),
+            arguments: BTreeMap::new(),
         };
         if let Some(args) = arguments {
             for arg in args {
@@ -115,20 +134,12 @@ impl Function {
 }
 
 /// Service managing functions.
-struct FunctionManagementService {
-    parent: Arc<dyn Parent>,
-    function_pool: HashMap<u32, Function>,
+struct  FunctionManagementService {
+    parent: &'static dyn Parent,
+    function_pool: BTreeMap<u32, Function>,
 }
 
 impl FunctionManagementService {
-    /// Creates a new function management service.
-    fn new(parent: Arc<dyn Parent>) -> Self {
-        FunctionManagementService {
-            parent,
-            function_pool: HashMap::new(),
-        }
-    }
-
     /// Retrieves a function by its ID.
     fn get_function(&self, function_id: u32) -> Option<&Function> {
         self.function_pool.get(&function_id)
@@ -138,26 +149,11 @@ impl FunctionManagementService {
     fn add_function(&mut self, function: Function) {
         self.function_pool.insert(function.function_id, function);
     }
-}
 
-/// Controller for the function management service.
-struct FunctionManagementServiceController {
-    service: FunctionManagementService,
-}
-
-impl FunctionManagementServiceController {
-    /// Creates a new controller with the given parent.
-    fn new(parent: Arc<dyn Parent>) -> Self {
-        FunctionManagementServiceController {
-            service: FunctionManagementService::new(parent),
-        }
-    }
-
-    /// Adds functions from a JSON file.
-    fn add_functions_from_file(&mut self, filepath: &str, node_id: u32) -> io::Result<()> {
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-        let json: Value = serde_json::from_reader(reader)?;
+    /// Adds functions from a JSON string slice.
+    #[cfg(feature = "std")]
+    fn add_functions_from_json(&mut self, json_str: &str, node_id: u32) -> Result<(), SerdeError> {
+        let json: serde_json::Value = from_str(json_str)?;
 
         if let Some(list_of_dicts) = json["functions"].as_array() {
             for function in list_of_dicts {
@@ -174,7 +170,7 @@ impl FunctionManagementServiceController {
                 });
 
                 let function = Function::new(function_id, function_name, arguments);
-                self.service.add_function(function);
+                self.add_function(function);
             }
         }
         Ok(())

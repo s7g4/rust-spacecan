@@ -1,5 +1,15 @@
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
-use std::sync::{Arc, Mutex};
+extern crate alloc;
+
+use alloc::sync::Arc;
+use cortex_m::interrupt::{Mutex, free as interrupt_free};
+use alloc::vec::Vec;
+use core::option::Option;
+use core::option::Option::{Some, None};
+use core::result::Result;
+use core::result::Result::{Ok, Err};
+use core::cell::UnsafeCell;
+use core::borrow::Borrow;
 
 // Define a trait for Bus operations
 pub trait Bus {
@@ -12,40 +22,47 @@ pub trait Bus {
 
 // Implementation of a basic Bus
 pub struct BusImpl {
-    buffer: Arc<Mutex<Vec<CanFrame>>>,
+    buffer: UnsafeCell<Vec<CanFrame>>
 }
 
 impl BusImpl {
     pub fn new() -> Self {
         BusImpl {
-            buffer: Arc::new(Mutex::new(Vec::new())),
+            buffer: UnsafeCell::new(Vec::new()),
         }
     }
 }
 
 impl Bus for BusImpl {
     fn flush_frame_buffer(&self) {
-        let mut buffer = self.buffer.lock().unwrap();
-        buffer.clear();
+        interrupt_free(|_cs| {
+            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
+            buffer.clear();
+        });
     }
     
     fn start_receive(&self) {
-        println!("Bus receiving started.");
+        // Removed println for no_std compatibility
     }
     
     fn stop_receive(&self) {
-        println!("Bus receiving stopped.");
+        // Removed println for no_std compatibility
     }
     
     fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError> {
-        let mut buffer = self.buffer.lock().unwrap();
-        buffer.push(can_frame.clone());
-        println!("Sent CAN Frame: {:?}", can_frame);
+        interrupt_free(|_cs| {
+            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
+            buffer.push(can_frame.clone());
+        });
         Ok(())
     }
     
     fn get_frame(&self) -> Option<CanFrame> {
-        let mut buffer = self.buffer.lock().unwrap();
-        buffer.pop()
+        let mut frame = None;
+        interrupt_free(|_cs| {
+            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
+            frame = buffer.pop();
+        });
+        frame
     }
 }

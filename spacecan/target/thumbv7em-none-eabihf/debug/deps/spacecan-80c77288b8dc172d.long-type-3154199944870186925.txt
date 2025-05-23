@@ -1,0 +1,1 @@
+HashMap<(u32, u32), ST20_parameter_management::Parameter>

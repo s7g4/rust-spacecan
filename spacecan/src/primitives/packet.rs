@@ -1,4 +1,8 @@
-use std::collections::HashMap;
+extern crate alloc;
+
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::String;
 use super::can_frame::{CanFrame, CanFrameError};
 
 const MAX_DATA_LENGTH: usize = 6;
@@ -30,13 +34,13 @@ impl Packet {
 }
 
 pub struct PacketAssembler {
-    buffer: HashMap<u32, HashMap<u8, Vec<u8>>>, // Maps can_id to a map of frame index to data
+    buffer: BTreeMap<u32, BTreeMap<u8, Vec<u8>>>, // Maps can_id to a map of frame index to data
 }
 
 impl PacketAssembler {
     pub fn new() -> Self {
         PacketAssembler {
-            buffer: HashMap::new(),
+            buffer: BTreeMap::new(),
         }
     }
 

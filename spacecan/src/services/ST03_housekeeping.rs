@@ -1,15 +1,17 @@
-/// Housekeeping Service module.
-///
-/// This module defines the controller and service for the Housekeeping Service,
-/// managing housekeeping reports and processing incoming data.
 
-use serde_json::Value;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufReader};
-use std::time::{Duration, SystemTime};
-use std::thread;
-use std::sync::{Arc, Mutex};
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::collections::BTreeMap;
+use core::option::Option;
+use core::option::Option::{Some, None};
+use core::result::Result;
+use core::result::Result::{Ok, Err};
+use core::time::Duration;
+use cortex_m::interrupt::Mutex;
+use alloc::sync::Arc;
 
 /// Represents a packet with data payload.
 #[derive(Debug)]
@@ -71,7 +73,7 @@ impl HousekeepingReport {
     }
 
     /// Decodes data bytes into a vector of f64 values.
-    fn decode(&self, data: &[u8]) -> Vec<f64> {
+    fn decode(&self, _data: &[u8]) -> Vec<f64> {
         // Implement decoding logic here.
         vec![] // Placeholder.
     }
@@ -80,7 +82,7 @@ impl HousekeepingReport {
 /// Service managing housekeeping reports.
 struct HousekeepingService {
     parent: Arc<dyn Parent>,
-    housekeeping_reports: HashMap<(u32, u32), HousekeepingReport>,
+    housekeeping_reports: BTreeMap<(u32, u32), HousekeepingReport>,
 }
 
 impl HousekeepingService {
@@ -88,7 +90,7 @@ impl HousekeepingService {
     fn new(parent: Arc<dyn Parent>) -> Self {
         HousekeepingService {
             parent,
-            housekeeping_reports: HashMap::new(),
+            housekeeping_reports: BTreeMap::new(),
         }
     }
 
@@ -122,27 +124,11 @@ impl HousekeepingServiceController {
     }
 
     /// Adds housekeeping reports from a JSON file.
-    fn add_housekeeping_reports_from_file(&mut self, filepath: &str, node_id: u32) -> io::Result<()> {
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-        let json: Value = serde_json::from_reader(reader)?;
-
-        if let Some(list_of_dicts) = json["housekeeping_reports"].as_array() {
-            for report in list_of_dicts {
-                let report_id = (node_id, report["report_id"].as_u64().unwrap() as u32);
-                let interval = report["interval"].as_f64().unwrap();
-                let enabled = report["enabled"].as_bool().unwrap();
-                let parameter_ids: Vec<(u32, u32)> = report["parameter_ids"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|id| (node_id, id.as_u64().unwrap() as u32))
-                    .collect();
-
-                self.service.define_housekeeping_report(report_id, interval, enabled, parameter_ids);
-            }
-        }
-        Ok(())
+    #[cfg(feature = "std")]
+    fn add_housekeeping_reports_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), ()> {
+        // This function requires std for file IO and serde_json
+        // It is feature gated to std only
+        unimplemented!()
     }
 
     /// Processes incoming housekeeping data packets.
@@ -152,8 +138,8 @@ impl HousekeepingServiceController {
             let report_id = (node_id, data[0] as u32);
             let data = &data[1..];
             if let Some(housekeeping_report) = self.service.get_housekeeping_report(report_id) {
-                let decoded_data = housekeeping_report.decode(data);
-                let mut report: std::collections::HashMap<String, f64> = HashMap::new();
+                let _decoded_data = housekeeping_report.decode(data);
+                let _report: BTreeMap<String, f64> = BTreeMap::new();
 
                 // Assuming decoded_data and report are used here, add closing braces
             }

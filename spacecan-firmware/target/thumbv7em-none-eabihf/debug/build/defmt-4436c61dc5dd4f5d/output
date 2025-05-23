@@ -1,0 +1,1 @@
+cargo:rustc-link-search=/home/shaurya/Desktop/rust-spacecan/spacecan-firmware/target/thumbv7em-none-eabihf/debug/build/defmt-4436c61dc5dd4f5d/out
