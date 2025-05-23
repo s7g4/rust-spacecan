@@ -1,46 +1,19 @@
 using "sysbus"
-name: STM32F4Discovery
 
+name: stm32f4_discovery
 
-cpu:
-    type: CortexM
-    name: cpu
-    cpuType: cortexm4
+cpu: CortexM4 @ sysbus
 
-peripherals:
-    type: UART
-    name: uart2
-    address: 0x40004400
+sysbus: Memory.MappedMemory {
+    start: 0x20000000;
+    size: 0x10000
+}
+sysbus: Memory.MappedMemory {
+    start: 0x80000000;
+    size: 0x100000
+}
+sysbus: UART.UART {
+    start: 0x40004400;
+    name: uart2;
     irq: 38
-
-    type: GPIOPort
-    name: gpioPortA
-    address: 0x40020000
-
-    type: GPIOPort
-    name: gpioPortB
-    address: 0x40020400
-     
-    type: GPIOPort
-    name: gpioPortC
-    address: 0x40020800
-
-    type: GPIOPort
-    name: gpioPortD
-    address: 0x40020C00
-
-    type: GPIOPort
-    name: gpioPortE
-    address: 0x40021000
-
-    type: RCC
-    name: rcc
-    address: 0x40023800
-
-    type: NonMaskablePeripheral
-    name: flash
-    address: 0x40023C00
-
-    type: Timer
-    name: timer2
-    address: 0x40000000
+}

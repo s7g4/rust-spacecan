@@ -1,11 +1,15 @@
-mach create "STM32F4Discovery"
+using sysbus
 
-machine LoadPlatformDescription @./stm32f4_discovery.repl
+mach create "STM32F4_SpaceCAN"
 
-# Enable UART output to terminal
-showAnalyzer sysbus.uart2
+machine LoadPlatformDescription "/home/shaurya/Desktop/rust-spacecan/renode/stm32f4_discovery.repl"
 
-# Load the Rust-compiled ELF firmware
-sysbus LoadELF @/home/shaurya/Desktop/rust-spacecan/target/thumbv7em-none-eabihf/release/firmware
+logLevel 3
+
+# Load firmware (adjust path to your actual ELF binary)
+sysbus LoadELF "/home/shaurya/Desktop/rust-spacecan/target/thumbv7em-none-eabihf/release/spacecan"
+
+showAnalyzer usart2
+connector Connect sysbus.usart2
 
 start
