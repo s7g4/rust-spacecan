@@ -1,0 +1,46 @@
+{
+  "llvm-target": "thumbv7em-none-eabihf",
+  "target-endian": "little",
+  "target-pointer-width": "32",
+  "target-c-int-width": "32",
+  "arch": "arm",
+  "os": "none",
+  "env": "eabihf",
+  "vendor": "unknown",
+  "linker-flavor": "ld.lld",
+  "linker": "rust-lld",
+  "cpu": "cortex-m7",
+  "features": "+v7,+thumb2,+fp-only-sp,+d16,+fp-armv8",
+  "max-atomic-width": 32,
+  "disable-redzone": true,
+  "executables": true,
+  "relocation-model": "static",
+  "code-model": "small","no-default-libraries": true,
+  "panic-strategy": "abort",
+  "position-independent-executables": false,
+  "emit-debug-gdb-scripts": true,
+  "has-rpath": false,
+  "pre-link-args": {
+    "ld.lld": [
+      "--script=memory.x"
+    ]
+  },
+  "post-link-args": {
+    "ld.lld": [
+      "-z",
+      "now",
+      "-z",
+      "relro"
+    ]
+  },
+  "link-args": [
+    "-nostartfiles"
+  ],
+  "target-family": [
+    "unix",
+    "embedded"
+  ],
+  "crt-static": true,
+  "data-layout": "e-m:e-p:32:32-i8:8:8-i16:16:16-i64:64:64-f32:32:32-f64:64:64-n32-S64",
+  "llvm-flags": ["-float-abi=hard"]
+}

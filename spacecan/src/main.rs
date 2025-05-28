@@ -1,17 +1,27 @@
 #![no_std]
 #![no_main]
 
+#[cfg(feature = "std")]
 extern crate alloc;
 
+#[cfg(feature = "std")]
 use spacecan::primitives::can_frame::CanFrame;
+#[cfg(feature = "std")]
 use spacecan::parser::{decode_frame, encode_frame};
+#[cfg(feature = "std")]
 use spacecan::primitives::heartbeat::Heartbeat;
+#[cfg(feature = "std")]
 use core::option::Option::Some;
+#[cfg(feature = "std")]
 use spacecan::transport::mock::MockTransport;
+#[cfg(feature = "std")]
 use core::alloc::Layout;
+#[cfg(feature = "std")]
 use linked_list_allocator::LockedHeap;
+#[cfg(feature = "std")]
 use core::panic::PanicInfo;
 
+#[cfg(feature = "std")]
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
@@ -27,6 +37,7 @@ macro_rules! eprintln {
     };
 }
 
+#[cfg(feature = "std")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     // Log the panic information if possible (e.g., send it over UART).
@@ -45,10 +56,17 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
+#[cfg(not(feature = "std"))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+
 /// # Safety
 /// - `heap_start` must be a valid pointer to a memory region.
 /// - The memory region starting at `heap_start` must be at least `heap_size` bytes long.
 /// - The memory region must not overlap with other memory regions.
+#[cfg(feature = "std")]
 fn init_allocator(heap_start: usize, heap_size: usize) {
     unsafe {
         ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
@@ -56,12 +74,6 @@ fn init_allocator(heap_start: usize, heap_size: usize) {
 }
 
 #[cfg(feature = "std")]
-macro_rules! eprintln {
-    ($($arg:tt)*) => {
-        println!($($arg)*);
-    };
-}
-
 /// Entry point of the application demonstrating CAN frame encoding and decoding.
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> ! {
@@ -107,7 +119,7 @@ pub extern "C" fn main() -> ! {
 
     let sts_payload = sts.to_payload();
     let sts_frame = CanFrame::new(0x380, Some(sts_payload))
-        .expect("Failed to create CanFrame for STS");
+        .expect("Failed to createCanFrame for STS");
 
     let sts_encoded = encode_frame(&sts_frame).expect("Encoding STS failed");
     println!("\nEncoded STS Frame: {:?}", sts_encoded);

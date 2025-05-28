@@ -24,10 +24,13 @@ cortex-m-rt = "0.7"
 panic-halt = "0.2"
 embedded-hal = "0.2"
 nb = "1.0"
-stm32f7xx-hal = { version = "0.8", features = ["stm32f767", "has-can"] }
+stm32f7xx-hal = { version = "0.8", features = ["stm32f767", "has-can"], default-features = false }
 spacecan = { path = "../spacecan" }
 bxcan = "0.7"
 fugit = "0.3"
 
 [package.metadata.cortex-m-rt]
 memory.x = "memory.x"
+
+[build]
+target = "thumbv7em-none-eabihf.json"

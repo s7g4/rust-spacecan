@@ -6,12 +6,12 @@ use std::vec::Vec;
 #[cfg(feature = "std")]
 use std::string::String;
 #[cfg(feature = "std")]
+use std::string::ToString;
+#[cfg(feature = "std")]
 use serde_json::{from_str, to_string, Error as SerdeError};
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use alloc::string::String;
 use alloc::format;
 use alloc::collections::BTreeMap;
 

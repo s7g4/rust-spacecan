@@ -3,12 +3,20 @@ name = "spacecan"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "spacecan"
+path = "src/main.rs"
+
 [features]
 default = ["no_std"]
-std = ["serde_json/std"]
+std = ["serde_json/std", "socketcan", "tokio", "anyhow", "tokio-stream"]
 no_std = ["hashbrown", "ahash"]
 
 [dependencies]
+socketcan = { version = "2.0", optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+anyhow = { version = "1.0", optional = true }
+tokio-stream = { version = "0.1", optional = true }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", optional = true, features = ["std"] }
 cortex-m = "0.7"
@@ -28,3 +36,4 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
