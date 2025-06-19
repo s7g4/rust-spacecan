@@ -1,6 +1,3 @@
-
-
-
 #[cfg(feature = "std")]
 use std::vec::Vec;
 #[cfg(feature = "std")]
@@ -18,11 +15,15 @@ use alloc::collections::BTreeMap;
 
 impl FunctionManagementService {
     /// Creates a new function management service.
-    fn new(parent: &'static dyn Parent) -> Self {
+    pub fn new(parent: &'static dyn Parent) -> Self {
         FunctionManagementService {
             parent,
             function_pool: BTreeMap::new(),
         }
+    }
+
+    pub fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32) {
+        // Implementation of process method
     }
 }
 
@@ -30,20 +31,12 @@ use core::option::Option;
 use core::result::Result;
 
 /// Represents a packet with data payload.
-#[derive(Debug)]
-struct Packet {
+pub struct Packet {
     data: Vec<u8>,
 }
 
-impl Packet {
-    /// Creates a new packet with the given data.
-    fn new(data: Vec<u8>) -> Self {
-        Packet { data }
-    }
-}
-
 /// Trait defining the parent interface for sending packets.
-trait Parent {
+pub trait Parent {
     /// Sends a packet.
     fn send(&self, packet: Packet);
 }
@@ -134,7 +127,7 @@ impl Function {
 }
 
 /// Service managing functions.
-struct  FunctionManagementService {
+pub struct FunctionManagementService {
     parent: &'static dyn Parent,
     function_pool: BTreeMap<u32, Function>,
 }

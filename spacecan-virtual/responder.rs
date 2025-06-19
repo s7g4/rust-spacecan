@@ -1,7 +1,11 @@
 #![cfg_attr(not(feature = "async"), allow(dead_code, unused_imports))]
 
-#[cfg(feature = "async")]
-use tokio::task;
+use spacecan::services::ST08_function_management;
+use spacecan::services::ST01_request_verification;
+use spacecan::services::ST20_parameter_management;
+use spacecan::services::ST03_housekeeping;
+
+
 #[cfg(feature = "async")]
 use tokio_stream::StreamExt;
 #[cfg(feature = "async")]
@@ -66,10 +70,19 @@ impl CanSocketStream {
 #[cfg(feature = "async")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    use spacecan::services::ST17_test;
+
     let socket = socketcan::Socket::open("vcan0")?;
     let mut stream = CanSocketStream::new(socket);
 
     println!("Responder listening on vcan0...");
+
+    // Instantiate services
+    let function_management = ST08_function_management::FunctionManagementService::new(&MyParent {});
+    let request_verification = ST01_request_verification::RequestVerificationServiceController::new(std::sync::Arc::new(MyParent {}));
+    let parameter_management = ST20_parameter_management::ParameterManagementServiceController::new(Box::new(MyParent {}));
+    let housekeeping = ST03_housekeeping::HousekeepingServiceController::new(std::sync::Arc::new(MyParent {}));
+    let test_service = ST17_test::TestServiceController::new(Box::new(MyParent {}));
 
     while let Some(frame_result) = stream.next().await {
         match frame_result {
@@ -82,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
                     socketcan::Id::Extended(id_val) => id_val.as_raw().try_into().unwrap(),
                 };
 
+                // Example: dispatch frame to services based on raw_id or other criteria
                 match raw_id {
                     0x700 => {
                         // Heartbeat frame
@@ -103,6 +117,12 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
                     _ => {
+                        // Dispatch to services here, example:
+                        function_management.process(0, raw_id as u8, data.to_vec(), 0);
+                        request_verification.process(0, raw_id as u8, data.to_vec(), 0);
+                        parameter_management.process(0, raw_id as u8, data.to_vec(), 0);
+                        housekeeping.process(0, raw_id as u8, data.to_vec(), 0);
+                        test_service.process(0, raw_id as u8, data.to_vec(), 0);
                         println!("Other CAN frame received: id=0x{:X} data={:?}", raw_id, data);
                     }
                 }
@@ -114,6 +134,83 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+struct MyParent;
+
+impl ST08_function_management::Parent for MyParent {
+    fn send(&self, _packet: ST08_function_management::Packet) {
+        // Implement send logic here
+    }
+}
+
+use spacecan::services::ST17_test::RequestVerification as ST17RequestVerification;
+
+trait RequestVerification {
+    fn send_success_acceptance_report(&self, args: &[u8]);
+    fn send_success_completion_report(&self, args: &[u8]);
+    fn send_fail_acceptance_report(&self, args: &[u8]);
+    fn send_fail_completion_report(&self, args: &[u8]);
+}
+
+trait ParentST01 {
+    fn send(&self, packet: Vec<u8>);
+    fn request_verification(&self) -> &dyn RequestVerification;
+}
+
+struct MyRequestVerification;
+
+impl RequestVerification for MyRequestVerification {
+    fn send_success_acceptance_report(&self, _args: &[u8]) {
+        // Implement actual logic or leave empty
+    }
+    fn send_success_completion_report(&self, _args: &[u8]) {
+        // Implement actual logic or leave empty
+    }
+    fn send_fail_acceptance_report(&self, _args: &[u8]) {
+        // Implement actual logic or leave empty
+    }
+    fn send_fail_completion_report(&self, _args: &[u8]) {
+        // Implement actual logic or leave empty
+    }
+}
+
+impl ParentST01 for MyParent {
+    fn send(&self, _packet: Vec<u8>) {
+        // Implement send logic here
+    }
+    fn request_verification(&self) -> &dyn RequestVerification {
+        &MyRequestVerification
+    }
+}
+
+trait ParentST20 {
+    fn send(&self, packet: Vec<u8>, node_id: u32);
+    fn request_verification(&self) -> &dyn RequestVerification;
+}
+
+impl ParentST20 for MyParent {
+    fn send(&self, _packet: Vec<u8>, _node_id: u32) {
+        // Implement send logic here
+    }
+    fn request_verification(&self) -> &dyn RequestVerification {
+        &MyRequestVerification
+    }
+}
+
+trait ParentST03 {
+    fn send(&self, packet: Vec<u8>);
+    fn get_parameter(&self, parameter_id: (u32, u32)) -> Vec<u8>;
+}
+
+impl ParentST03 for MyParent {
+    fn send(&self, _packet: Vec<u8>) {
+        // Implement send logic here
+    }
+    fn get_parameter(&self, _parameter_id: (u32, u32)) -> Vec<u8> {
+        // Implement get_parameter logic here or return dummy
+        vec![]
+    }
 }
 
 #[cfg(not(feature = "async"))]

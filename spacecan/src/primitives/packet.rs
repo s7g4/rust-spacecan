@@ -1,8 +1,8 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::vec;
 use alloc::vec::Vec;
-use alloc::string::String;
 use super::can_frame::{CanFrame, CanFrameError};
 
 const MAX_DATA_LENGTH: usize = 6;

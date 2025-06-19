@@ -12,7 +12,6 @@ overflow-checks = true
 lto = false
 panic = "abort"
 
-
 [profile.release]
 opt-level = 3
 debug = false
@@ -20,5 +19,12 @@ overflow-checks = true
 lto = true
 panic = "abort"
 strip = "debuginfo"
+
+[alias]
+run-virtual = "run -p spacecan-virtual"
+run-firmware = "run -p spacecan-firmware"
+build-virtual = "build -p spacecan-virtual"
+build-firmware = "build -p spacecan-firmware"
+
 
 

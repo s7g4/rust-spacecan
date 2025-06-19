@@ -8,3 +8,6 @@ pub mod services;
 pub mod transport;
 pub mod parser;
 pub mod protocol;
+
+#[cfg(not(feature = "std"))]
+pub mod panic_handler;

@@ -6,30 +6,9 @@ Rust SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Ne
 
 - `spacecan`: A no_std Rust library providing CAN frame encoding, decoding, and protocol services.
 - `spacecan-firmware`: Minimal firmware targeting STM32F4Discovery hardware, designed for simulation with Renode.
+- `spacecan-virtual`: Virtual implementation of SpaceCAN for testing and simulation.
 
 The project aims to provide a robust, embedded-friendly CAN protocol implementation with simulation support.
-
-## Workspace Structure
-
-- `spacecan/`: Core CAN protocol library and examples.
-- `spacecan-firmware/`: Firmware implementation for STM32F4Discovery.
-- `renode/`: Renode simulation scripts for running the firmware in a virtual STM32F4Discovery environment.
-
-## Building the Project
-
-Ensure you have Rust installed with the appropriate target for embedded ARM Cortex-M:
-
-```bash
-rustup target add thumbv7em-none-eabihf
-```
-
-### Build the entire workspace
-
-From the root directory:
-
-```bash
-cargo build --release
-```
 
 ## 📌 Project Structure
 
@@ -111,6 +90,29 @@ rust-spacecan/
 
 ```
 
+## Workspace Structure
+
+- `spacecan/`: Core CAN protocol library and examples.
+- `spacecan-firmware/`: Firmware implementation for STM32F4Discovery.
+- `spacecan-virtual/`: Virtual implementation for testing and simulation.
+- `renode/`: Renode simulation scripts for running the firmware in a virtual STM32F4Discovery environment.
+
+## Building the Project
+
+Ensure you have Rust installed with the appropriate target for embedded ARM Cortex-M:
+
+```bash
+rustup target add thumbv7em-none-eabihf
+```
+
+### Build the entire workspace
+
+From the root directory:
+
+```bash
+cargo build --release
+```
+
 ### Build individual crates
 
 - Build `spacecan` library:
@@ -123,6 +125,40 @@ cargo build --release -p spacecan
 
 ```bash
 cargo build --release -p spacecan-firmware
+```
+
+- Build `spacecan-virtual` virtual implementation:
+
+```bash
+cargo build --release -p spacecan-virtual
+```
+
+## Running Specific Implementations
+
+To avoid interchanging the virtual and firmware implementations, always explicitly build and run the desired crate.
+
+### Run the virtual implementation
+
+```bash
+cargo run -p spacecan-virtual
+```
+
+Or using the Cargo alias:
+
+```bash
+cargo run-virtual
+```
+
+### Run the firmware implementation
+
+```bash
+cargo run -p spacecan-firmware
+```
+
+Or using the Cargo alias:
+
+```bash
+cargo run-firmware
 ```
 
 ## Running the Mock Example in `spacecan`
@@ -179,6 +215,7 @@ You should see UART output in the Renode terminal.
 - `spacecan` is a no_std crate by default, with optional `std` feature for examples and testing.
 - Uses embedded Rust crates such as `cortex-m`, `embedded-hal`, `stm32f7xx-hal`, and `bxcan`.
 - `spacecan-firmware` depends on `spacecan` and hardware abstraction layers for STM32F7 series.
+- `spacecan-virtual` depends on `spacecan` and provides a virtual implementation for testing.
 
 ## Additional Notes
 

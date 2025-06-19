@@ -2,8 +2,6 @@
 #![no_main]
 
 use cortex_m_rt::entry;
-use panic_halt as _;
-
 use stm32f7xx_hal::{
     pac,
     prelude::*,
@@ -14,6 +12,8 @@ use bxcan::{Can, filter::{Mask32, BankConfig}, Fifo};
 use fugit::HertzU32;
 
 use spacecan::protocol::{SpaceCAN, SpaceCANFrame};
+
+pub mod panic_handler;
 
 #[entry]
 fn main() -> ! {

@@ -2,7 +2,10 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec;
-use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
+#[cfg(feature = "std")]
+use std::string::ToString;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::option::Option;
@@ -121,19 +124,19 @@ impl ParameterManagementService {
     }
 }
 
-struct ParameterManagementServiceController {
+pub struct ParameterManagementServiceController {
     service: ParameterManagementService,
 }
 
 impl ParameterManagementServiceController {
-    fn new(parent: Box<dyn Parent>) -> Self {
+    pub fn new(parent: Box<dyn Parent>) -> Self {
         ParameterManagementServiceController {
             service: ParameterManagementService::new(parent),
         }
     }
 
     #[cfg(feature = "std")]
-    fn add_parameters_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), std::io::Error> {
+    pub fn add_parameters_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), std::io::Error> {
         let file = File::open(filepath)?;
         let reader = BufReader::new(file);
         let json: Value = serde_json::from_reader(reader)?;

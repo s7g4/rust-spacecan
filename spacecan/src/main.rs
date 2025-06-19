@@ -4,6 +4,8 @@
 #[cfg(feature = "std")]
 extern crate alloc;
 
+#[cfg(all(feature = "std", not(test)))]
+use std::println;
 #[cfg(feature = "std")]
 use spacecan::primitives::can_frame::CanFrame;
 #[cfg(feature = "std")]
@@ -35,31 +37,6 @@ macro_rules! eprintln {
     ($($arg:tt)*) => {
         println!($($arg)*);
     };
-}
-
-#[cfg(feature = "std")]
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    // Log the panic information if possible (e.g., send it over UART).
-    if let Some(location) = info.location() {
-        // Example: Log the file and line number of the panic.
-        // Replace this with your logging mechanism.
-        eprintln!(
-            "Panic occurred in file '{}' at line {}",
-            location.file(),
-            location.line()
-        );
-    } else {
-        eprintln!("Panic occurred but can't get location information.");
-    }
-
-    loop {}
-}
-
-#[cfg(not(feature = "std"))]
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
 }
 
 /// # Safety
@@ -107,30 +84,15 @@ pub extern "C" fn main() -> ! {
     let received = transport.receive().expect("No frame received");
     eprintln!("Received Frame from Mock Transport: {:?}", received);
 
+    loop {}
+}
 
-    // === 2. STS Frame (e.g., Ping) ===
-    // The STS frame code is commented out because primitives::sts does not exist.
-    /*
-    let sts = Sts {
-        subsystem: 1,
-        command: StsType::Ping as u8,
-        parameters: vec![],
-    };
+#[cfg(not(feature = "std"))]
+use core::panic::PanicInfo;
 
-    let sts_payload = sts.to_payload();
-    let sts_frame = CanFrame::new(0x380, Some(sts_payload))
-        .expect("Failed to createCanFrame for STS");
-
-    let sts_encoded = encode_frame(&sts_frame).expect("Encoding STS failed");
-    println!("\nEncoded STS Frame: {:?}", sts_encoded);
-
-    let sts_decoded = decode_frame(&sts_encoded).expect("Decoding STS failed");
-    println!("Decoded STS Frame: {:?}", sts_decoded);
-
-    transport.send(&sts_encoded);
-    let received_sts = transport.receive().expect("No STS frame received");
-    println!("Received STS Frame from Mock Transport: {:?}", received_sts);
-    */
-
+/// This function is called on panic.
+#[cfg(not(feature = "std"))]
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }

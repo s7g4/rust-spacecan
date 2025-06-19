@@ -3,7 +3,8 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec;
-use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 use alloc::collections::BTreeMap;
 use core::option::Option;
 use core::option::Option::{Some, None};
@@ -111,13 +112,13 @@ impl HousekeepingService {
 }
 
 /// Controller for the housekeeping service.
-struct HousekeepingServiceController {
+pub struct HousekeepingServiceController {
     service: HousekeepingService,
 }
 
 impl HousekeepingServiceController {
     /// Creates a new controller with the given parent.
-    fn new(parent: Arc<dyn Parent>) -> Self {
+    pub fn new(parent: Arc<dyn Parent>) -> Self {
         HousekeepingServiceController {
             service: HousekeepingService::new(parent),
         }
@@ -125,14 +126,14 @@ impl HousekeepingServiceController {
 
     /// Adds housekeeping reports from a JSON file.
     #[cfg(feature = "std")]
-    fn add_housekeeping_reports_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), ()> {
+    pub fn add_housekeeping_reports_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), ()> {
         // This function requires std for file IO and serde_json
         // It is feature gated to std only
         unimplemented!()
     }
 
     /// Processes incoming housekeeping data packets.
-    fn process(&self, service: u32, subtype: u32, data: Vec<u8>, node_id: u32) {
+    pub fn process(&self, service: u32, subtype: u32, data: Vec<u8>, node_id: u32) {
         let case = (service, subtype);
         if case == (3, 25) {
             let report_id = (node_id, data[0] as u32);
