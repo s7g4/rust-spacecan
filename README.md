@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rust SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Network) protocol stack and firmware for embedded systems. It consists of two main crates:
+Rust SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Network) protocol stack and firmware for embedded systems. It consists of three main crates:
 
 - `spacecan`: A no_std Rust library providing CAN frame encoding, decoding, and protocol services.
 - `spacecan-firmware`: Minimal firmware targeting STM32F4Discovery hardware implementation.
@@ -216,10 +216,6 @@ cargo run --example heartbeat_example --features std
 
 This example encodes a heartbeat CAN frame, sends it via a mock transport, and decodes it back.
 
-## Running the Firmware in Renode Simulation
-
-The firmware is designed to run on an STM32F4Discovery board.
-
 ## Dependencies and Features
 
 - `spacecan` is a no_std crate by default, with optional `std` feature for examples and testing.
@@ -231,7 +227,6 @@ The firmware is designed to run on an STM32F4Discovery board.
 
 - The project uses a linked list allocator for dynamic memory in no_std environments.
 - Panic handling is minimal and designed for embedded constraints.
-- The Renode scripts define the hardware peripherals and memory layout for simulation.
 
 ## Contributing
 
@@ -242,7 +237,7 @@ For detailed contribution guidelines, please see the [CONTRIBUTING.md](CONTRIBUT
 ## License
 
 This project is licensed under the terms specified in the [LICENSE.md](LICENSE.md) file.
-[text](thumbv7em-none-eabihf.json)
+
 ---
 
 For detailed usage or developer guides, additional documentation can be added in the `docs/` directory.
