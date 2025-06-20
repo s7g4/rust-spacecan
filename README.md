@@ -5,7 +5,7 @@
 Rust SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Network) protocol stack and firmware for embedded systems. It consists of two main crates:
 
 - `spacecan`: A no_std Rust library providing CAN frame encoding, decoding, and protocol services.
-- `spacecan-firmware`: Minimal firmware targeting STM32F4Discovery hardware, designed for simulation with Renode.
+- `spacecan-firmware`: Minimal firmware targeting STM32F4Discovery hardware implementation.
 - `spacecan-virtual`: Virtual implementation of SpaceCAN for testing and simulation.
 
 The project aims to provide a robust, embedded-friendly CAN protocol implementation with simulation support.
@@ -33,6 +33,7 @@ rust-spacecan/
 │   |   |   ├── transport/       # Low-level transport layer
 │   │   |   |   ├── base.rs              # Bus implementation
 │   │   |   |   ├── frame_buffer.rs       # Frame buffering
+│   │   |   |   ├── mock.rs         # Mock implementation
 │   |   |   ├── tests/           # Unit test suite
 │   |   |   |   ├── test_base.rs         # Unit tests for Bus implementation
 │   |   |   |   ├── test_can_frame.rs    # Unit tests for CAN frames
@@ -56,12 +57,10 @@ rust-spacecan/
 |   |   |   |   ├── service_full_demo.rs    #servive full demo
 |   |   |   |   ├── service_splitter.rs    #service splitter example
 |   |   |   ├── README.md   #documentation for examples
+|   |   |   └── vcan.sh   #vcan documentation
 |   |   ├── docs/
 |   |   |   ├──ECSS-E-ST-50-15C.pdf    #ECSS standard defining CAN application layer.
 |   |   |   ├──ECSS-E-ST-70-41C(15April2016).pdf    #ECSS Telecommand/Telemetry protocol document.
-|   |   ├── target/
-|   |   |   ├── debug    #Default build output folders.
-|   |   |   ├── thumbv7em-none-eabihf    #Cross-compiled artifacts for embedded Cortex-M4 targets.
 |   |   ├── Cargo.toml    # Rust package configuration
 |   |   ├── Cargo.lock    #Lock file for dependency versions
 |   ├──spacecan-firmware/
@@ -70,18 +69,18 @@ rust-spacecan/
 |   |   |   ├── lib.rs     #Library part of firmware crate
 |   |   ├──examples/
 |   |   |   ├── firmware.rs    #Firmware example
-|   |   ├──target/
-|   |   |   ├──debug    #Default build output folders.
-|   |   |   ├──thumbv7em-none-eabihf    #Cross-compiled artifacts for embedded Cortex-M4 targets.
 |   |   |   ├──release  #release file
 |   |   ├──Cargo.lock   #Lock file for dependency versions
 |   |   ├──Cargo.toml   # Rust package configuration
 |   |   ├──memory.x     #Memory configuration file
-|   ├──renode
-|   |   ├──renode    #Exutable file
-|   |   ├──spacecan.resc    #Script to load and run the spacecan simulation in Renode.
-|   |   ├──stm32_spacecan.resc    #Configuration script to setup STM32 platform and run firmware.
-|   |   ├──stm32f4_discovery.repl    #Platform description file for STM32F4 Discovery board.
+|   |   ├──thumbv7em-none-eabihf.json    #Target configuration file
+|   ├──spacecan-virtual/
+|   |   ├── src/
+|   |   |   ├── main.rs    #Main entry point for virtual implementation
+|   |   ├── Cargo.toml    # Rust package configuration
+|   |   ├── README.md    #Project Documentation
+|   |   ├── controller.rs    #Controller implementation
+|   |   ├── responder.rs     #Responder implementation
 |   ├── README.md               # Project documentation
 |   ├── CONTRIBUTING.md         # Contribution guidelines
 |   ├── LICENSE.md              # Project license
@@ -95,7 +94,6 @@ rust-spacecan/
 - `spacecan/`: Core CAN protocol library and examples.
 - `spacecan-firmware/`: Firmware implementation for STM32F4Discovery.
 - `spacecan-virtual/`: Virtual implementation for testing and simulation.
-- `renode/`: Renode simulation scripts for running the firmware in a virtual STM32F4Discovery environment.
 
 ## Building the Project
 
@@ -137,19 +135,61 @@ cargo build --release -p spacecan-virtual
 
 To avoid interchanging the virtual and firmware implementations, always explicitly build and run the desired crate.
 
-### Run the virtual implementation
+### Running spacecan-virtual
+
+#### Prerequisites
+
+- Rust toolchain installed (preferably nightly for latest features)
+- Cargo package manager
+- Virtual CAN interface (e.g., `vcan0`) set up on your Linux system
+
+To set up the virtual CAN interface, run the following commands with root privileges:
 
 ```bash
-cargo run -p spacecan-virtual
+sudo modprobe vcan
+sudo ip link add dev vcan0 type vcan
+sudo ip link set up vcan0
 ```
 
-Or using the Cargo alias:
+#### Build and Run
+
+Build the package with async features enabled:
 
 ```bash
-cargo run-virtual
+cargo build --release --features async -p spacecan-virtual
 ```
 
-### Run the firmware implementation
+Run the example responder or controller binaries:
+
+```bash
+cargo run --release --features async --bin responder -p spacecan-virtual
+```
+
+```bash
+cargo run --release --features async --bin controller -p spacecan-virtual
+```
+
+---
+
+### Running spacecan-firmware
+
+#### Prerequisites
+
+- Rust installed with the appropriate target for embedded ARM Cortex-M:
+
+```bash
+rustup target add thumbv7em-none-eabihf
+```
+
+#### Build and Run
+
+Build the firmware:
+
+```bash
+cargo build --release -p spacecan-firmware
+```
+
+Run the firmware:
 
 ```bash
 cargo run -p spacecan-firmware
@@ -160,6 +200,9 @@ Or using the Cargo alias:
 ```bash
 cargo run-firmware
 ```
+
+
+
 
 ## Running the Mock Example in `spacecan`
 
@@ -175,40 +218,7 @@ This example encodes a heartbeat CAN frame, sends it via a mock transport, and d
 
 ## Running the Firmware in Renode Simulation
 
-The firmware is designed to run on an STM32F4Discovery board simulated with Renode.
-
-### Prerequisites
-
-- Install [Renode](https://renode.io/).
-
-### Build the firmware
-
-```bash
-cargo build --release -p spacecan-firmware
-```
-
-### Run the simulation
-
-1. Open Renode.
-2. Load the platform description and firmware script:
-
-```bash
-include @renode/spacecan.resc
-```
-
-3. The script sets up the STM32F4Discovery machine, enables UART output, and loads the compiled firmware ELF from:
-
-```
-target/thumbv7em-none-eabihf/release/firmware
-```
-
-4. Start the simulation with:
-
-```bash
-start
-```
-
-You should see UART output in the Renode terminal.
+The firmware is designed to run on an STM32F4Discovery board.
 
 ## Dependencies and Features
 
@@ -227,10 +237,12 @@ You should see UART output in the Renode terminal.
 
 Contributions and improvements are welcome. Please follow Rust embedded best practices.
 
+For detailed contribution guidelines, please see the [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
 ## License
 
-Specify your project license here.
-
+This project is licensed under the terms specified in the [LICENSE.md](LICENSE.md) file.
+[text](thumbv7em-none-eabihf.json)
 ---
 
 For detailed usage or developer guides, additional documentation can be added in the `docs/` directory.
