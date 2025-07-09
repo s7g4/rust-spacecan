@@ -1,198 +1,177 @@
 extern crate alloc;
 
-use alloc::vec;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
+use alloc::collections::BTreeMap;
+use crate::services::core::{ServiceHandler, ServiceError};
+use crate::constants::ST17_TEST;
 
-// Cannot import private traits and structs from ST01_request_verification, so redefine minimal needed here:
-
-/// Represents a packet with data payload.
-#[derive(Debug)]
-pub struct Packet {
-    pub data: Vec<u8>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestType {
+    Connection = 1,
+    ApplicationConnection = 17,
 }
 
-impl Packet {
-    /// Creates a new packet with the given data.
-    pub fn new(data: Vec<u8>) -> Self {
-        Packet { data }
-    }
+#[derive(Debug, Clone)]
+pub struct TestRequest {
+    pub test_id: u16,
+    pub test_type: TestType,
+    pub application_id: Option<u16>,
+    pub timestamp: u32,
 }
 
-/// Trait defining the parent interface for sending packets.
-pub trait Parent: Send + Sync {
-    fn send(&self, packet: Packet);
+/// ST17 Test Service
+/// Implements ECSS-E-ST-70-41C Service 17
+pub struct TestService {
+    pending_tests: BTreeMap<u16, TestRequest>,
+    next_test_id: u16,
 }
 
-/// Mock or placeholder for RequestVerificationServiceResponder interface
-pub trait RequestVerification {
-    fn send_success_acceptance_report(&self, args: &[u8]);
-    fn send_success_completion_report(&self, args: &[u8]);
-    fn send_fail_acceptance_report(&self, args: &[u8]);
-    fn send_fail_completion_report(&self, args: &[u8]);
-}
-
-/// Dummy struct to implement RequestVerification trait for testing
-pub struct RequestVerificationServiceResponder;
-
-impl RequestVerificationServiceResponder {
-    pub fn new(_parent: Arc<dyn Parent>) -> Self {
-        RequestVerificationServiceResponder
-    }
-}
-
-impl RequestVerification for RequestVerificationServiceResponder {
-    fn send_success_acceptance_report(&self, _args: &[u8]) {}
-    fn send_success_completion_report(&self, _args: &[u8]) {}
-    fn send_fail_acceptance_report(&self, _args: &[u8]) {}
-    fn send_fail_completion_report(&self, _args: &[u8]) {}
-}
-
-/// Controller for the Test Service.
-pub struct TestServiceController {
-    parent: Arc<dyn Parent>,
-}
-
-impl TestServiceController {
-    /// Creates a new controller with the given parent.
-    pub fn new(parent: Arc<dyn Parent>) -> Self {
-        TestServiceController { parent }
-    }
-
-    /// Processes incoming packets based on service and subtype.
-    pub fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32) {
-        let case = (service, subtype);
-
-        match case {
-            (17, 2) => self.received_connection_test_report(node_id),
-            (17, 4) => {
-                let apid = data[0]; // Assuming data is at least 1 byte
-                self.received_application_connection_test_report(node_id, apid);
-            }
-            _ => {}
+impl TestService {
+    pub fn new() -> Self {
+        TestService {
+            pending_tests: BTreeMap::new(),
+            next_test_id: 1,
         }
     }
-
-    /// Sends a connection test packet.
-    pub fn send_connection_test(&self, node_id: u32) {
-        self.parent.send(Packet::new(vec![17, 1]));
+    
+    /// Create connection test request
+    pub fn create_connection_test(&mut self, current_time: u32) -> (u16, Vec<u8>) {
+        let test_id = self.next_test_id;
+        self.next_test_id = self.next_test_id.wrapping_add(1);
+        
+        let test_request = TestRequest {
+            test_id,
+            test_type: TestType::Connection,
+            application_id: None,
+            timestamp: current_time,
+        };
+        
+        self.pending_tests.insert(test_id, test_request);
+        
+        let mut response = Vec::new();
+        response.extend_from_slice(&test_id.to_be_bytes());
+        response.extend_from_slice(&current_time.to_be_bytes());
+        
+        (test_id, response)
     }
-
-    /// Sends an application connection test packet with APID.
-    pub fn send_application_connection_test(&self, node_id: u32, apid: u8) {
-        let mut packet_data = vec![17, 3];
-        packet_data.push(apid);
-        self.parent.send(Packet::new(packet_data));
+    
+    /// Create application connection test request
+    pub fn create_application_connection_test(&mut self, application_id: u16, current_time: u32) -> (u16, Vec<u8>) {
+        let test_id = self.next_test_id;
+        self.next_test_id = self.next_test_id.wrapping_add(1);
+        
+        let test_request = TestRequest {
+            test_id,
+            test_type: TestType::ApplicationConnection,
+            application_id: Some(application_id),
+            timestamp: current_time,
+        };
+        
+        self.pending_tests.insert(test_id, test_request);
+        
+        let mut response = Vec::new();
+        response.extend_from_slice(&test_id.to_be_bytes());
+        response.extend_from_slice(&application_id.to_be_bytes());
+        response.extend_from_slice(&current_time.to_be_bytes());
+        
+        (test_id, response)
     }
-
-    /// Handler for received connection test report.
-    pub fn received_connection_test_report(&self, _node_id: u32) {
-        // To be overwritten.
+    
+    /// Process connection test report
+    pub fn process_connection_test_report(&mut self, test_id: u16) -> Result<Vec<u8>, ServiceError> {
+        if let Some(test_request) = self.pending_tests.remove(&test_id) {
+            let mut response = Vec::new();
+            response.extend_from_slice(&test_id.to_be_bytes());
+            response.extend_from_slice(&test_request.timestamp.to_be_bytes());
+            response.push(1); // Success status
+            Ok(response)
+        } else {
+            Err(ServiceError::InvalidPacket)
+        }
     }
-
-    /// Handler for received application connection test report.
-    pub fn received_application_connection_test_report(&self, _node_id: u32, _apid: u8) {
-        // To be overwritten.
-    }
-}
-
-/// Responder for the Test Service.
-pub struct TestServiceResponder {
-    parent: Arc<dyn Parent>,
-    request_verification: RequestVerificationServiceResponder,
-}
-
-impl TestServiceResponder {
-    /// Creates a new responder with the given parent.
-    pub fn new(parent: Arc<dyn Parent>) -> Self {
-        let request_verification = RequestVerificationServiceResponder::new(parent.clone());
-        TestServiceResponder { parent, request_verification }
-    }
-
-    /// Processes incoming packets based on service and subtype.
-    pub fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32) {
-        let case = (service, subtype);
-
-        match case {
-            (17, 1) => {
-                // Send success acceptance report.
-                self.request_verification.send_success_acceptance_report(&[service, subtype]);
-
-                // Reply with connection test report (17, 2).
-                self.send_connection_test_report(node_id);
-
-                // Send success completion report.
-                self.request_verification.send_success_completion_report(&[service, subtype]);
+    
+    /// Process application connection test report
+    pub fn process_application_connection_test_report(&mut self, test_id: u16, application_id: u16) -> Result<Vec<u8>, ServiceError> {
+        if let Some(test_request) = self.pending_tests.get(&test_id) {
+            if test_request.application_id == Some(application_id) {
+                let test_request = self.pending_tests.remove(&test_id).unwrap();
+                let mut response = Vec::new();
+                response.extend_from_slice(&test_id.to_be_bytes());
+                response.extend_from_slice(&application_id.to_be_bytes());
+                response.extend_from_slice(&test_request.timestamp.to_be_bytes());
+                response.push(1); // Success status
+                Ok(response)
+            } else {
+                Err(ServiceError::InvalidPacket)
             }
-            (17, 3) => {
-                let apid = data[0]; // Assuming data is at least 1 byte.
+        } else {
+            Err(ServiceError::InvalidPacket)
+        }
+    }
+    
+    /// Get pending test count
+    pub fn pending_count(&self) -> usize {
+        self.pending_tests.len()
+    }
+    
+    /// Get all pending tests
+    pub fn get_pending_tests(&self) -> Vec<u16> {
+        self.pending_tests.keys().copied().collect()
+    }
+}
 
-                // Send success acceptance report.
-                self.request_verification.send_success_acceptance_report(&[service, subtype]);
-
-                // Run the connection test.
-                let result = self.received_application_connection_test(apid);
-
-                if result {
-                    // Reply with application connection test report (17, 4).
-                    self.send_application_connection_test_report(node_id, apid);
-
-                    // Send success completion report.
-                    self.request_verification.send_success_completion_report(&[service, subtype]);
-                } else {
-                    // Send fail completion report.
-                    self.request_verification.send_fail_completion_report(&[service, subtype]);
+impl ServiceHandler for TestService {
+    fn handle_request(&mut self, subservice: u8, data: &[u8], _source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+        match subservice {
+            1 => {
+                // Connection test request
+                if data.len() < 4 {
+                    return Err(ServiceError::InvalidPacket);
                 }
+                
+                let current_time = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+                let (_test_id, response) = self.create_connection_test(current_time);
+                Ok(Some(response))
             }
-            _ => {}
+            2 => {
+                // Connection test report
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let test_id = u16::from_be_bytes([data[0], data[1]]);
+                let response = self.process_connection_test_report(test_id)?;
+                Ok(Some(response))
+            }
+            17 => {
+                // Application connection test request
+                if data.len() < 6 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let application_id = u16::from_be_bytes([data[0], data[1]]);
+                let current_time = u32::from_be_bytes([data[2], data[3], data[4], data[5]]);
+                
+                let (_test_id, response) = self.create_application_connection_test(application_id, current_time);
+                Ok(Some(response))
+            }
+            18 => {
+                // Application connection test report
+                if data.len() < 4 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let test_id = u16::from_be_bytes([data[0], data[1]]);
+                let application_id = u16::from_be_bytes([data[2], data[3]]);
+                
+                let response = self.process_application_connection_test_report(test_id, application_id)?;
+                Ok(Some(response))
+            }
+            _ => Err(ServiceError::UnknownService),
         }
     }
-
-    /// Sends a connection test report.
-    pub fn send_connection_test_report(&self, node_id: u32) {
-        self.parent.send(Packet::new(vec![17, 2]));
+    
+    fn get_service_type(&self) -> u8 {
+        ST17_TEST
     }
-
-    /// Sends an application connection test report.
-    pub fn send_application_connection_test_report(&self, node_id: u32, apid: u8) {
-        self.parent.send(Packet::new(vec![17, 4, apid]));
-    }
-
-    /// Handles an application connection test.
-    pub fn received_application_connection_test(&self, _apid: u8) -> bool {
-        // Implement actual test logic here.
-        true
-    }
-}
-
-/// Mock implementation of Parent for testing.
-struct MockParent;
-
-impl Parent for MockParent {
-    fn send(&self, packet: Packet) {
-        // Mock send: print or log the packet
-        // e.g. println!("Sending packet: {:?}", packet);
-    }
-}
-
-/// Test function to demonstrate the Test Service functionality.
-pub fn st17_test() {
-    let parent = Arc::new(MockParent);
-    let controller = TestServiceController::new(parent.clone());
-    let responder = TestServiceResponder::new(parent.clone());
-
-    let node_id = 1;
-
-    // Controller sends connection test
-    controller.send_connection_test(node_id);
-
-    // Controller sends application connection test with apid 42
-    controller.send_application_connection_test(node_id, 42);
-
-    // Responder processes connection test packet (service 17, subtype 1)
-    responder.process(17, 1, vec![], node_id);
-
-    // Responder processes application connection test packet (service 17, subtype 3, apid 42)
-    responder.process(17, 3, vec![42], node_id);
 }

@@ -4,6 +4,7 @@ members = [
     "spacecan-firmware",
     "spacecan-virtual"
 ]
+resolver = "2"
 
 [profile.dev]
 opt-level = 0
@@ -20,7 +21,7 @@ lto = true
 panic = "abort"
 strip = "debuginfo"
 
-[alias]
+[workspace.metadata.cargo-alias]
 run-virtual = "run -p spacecan-virtual"
 run-firmware = "run -p spacecan-firmware"
 build-virtual = "build -p spacecan-virtual"

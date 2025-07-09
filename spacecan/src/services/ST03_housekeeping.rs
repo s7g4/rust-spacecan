@@ -1,149 +1,224 @@
-
 extern crate alloc;
 
-use alloc::string::String;
-use alloc::vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use core::option::Option;
-use core::option::Option::{Some, None};
-use core::result::Result;
-use core::result::Result::{Ok, Err};
-use core::time::Duration;
-use cortex_m::interrupt::Mutex;
-use alloc::sync::Arc;
+use crate::services::core::{ServiceHandler, ServiceError};
+use crate::constants::ST03_HOUSEKEEPING;
 
-/// Represents a packet with data payload.
-#[derive(Debug)]
-struct Packet {
-    data: Vec<u8>,
+#[derive(Debug, Clone)]
+pub struct HousekeepingParameter {
+    pub parameter_id: u16,
+    pub value: Vec<u8>,
+    pub timestamp: u32,
 }
 
-impl Packet {
-    /// Creates a new packet with the given data.
-    fn new(data: Vec<u8>) -> Self {
-        Packet { data }
-    }
+#[derive(Debug, Clone)]
+pub struct HousekeepingReport {
+    pub report_id: u16,
+    pub parameters: Vec<HousekeepingParameter>,
+    pub generation_time: u32,
+    pub enabled: bool,
+    pub collection_interval: u32, // in seconds
 }
 
-/// Trait defining the parent interface for sending packets and retrieving parameters.
-trait Parent {
-    /// Sends a packet.
-    fn send(&self, packet: Packet);
-    /// Retrieves a parameter by its ID.
-    fn get_parameter(&self, parameter_id: (u32, u32)) -> Parameter;
-}
-
-/// Represents a parameter with encoding information.
-#[derive(Debug)]
-struct Parameter {
-    encoding: String,
-}
-
-impl Parameter {
-    /// Encodes the parameter into bytes.
-    fn encode(&self) -> Vec<u8> {
-        // Implement encoding logic here.
-        vec![] // Placeholder.
-    }
-}
-
-/// Represents a housekeeping report.
-#[derive(Debug)]
-struct HousekeepingReport {
-    report_id: (u32, u32),
-    interval: f64,
-    enabled: bool,
-    parameter_ids: Vec<(u32, u32)>,
-    last_sent: f64,
-    encoding: String,
-}
-
-impl HousekeepingReport {
-    /// Creates a new housekeeping report.
-    fn new(report_id: (u32, u32), interval: f64, enabled: bool, parameter_ids: Vec<(u32, u32)>) -> Self {
-        HousekeepingReport {
-            report_id,
-            interval,
-            enabled,
-            parameter_ids,
-            last_sent: 0.0,
-            encoding: String::new(),
-        }
-    }
-
-    /// Decodes data bytes into a vector of f64 values.
-    fn decode(&self, _data: &[u8]) -> Vec<f64> {
-        // Implement decoding logic here.
-        vec![] // Placeholder.
-    }
-}
-
-/// Service managing housekeeping reports.
-struct HousekeepingService {
-    parent: Arc<dyn Parent>,
-    housekeeping_reports: BTreeMap<(u32, u32), HousekeepingReport>,
+/// ST03 Housekeeping Service
+/// Implements ECSS-E-ST-70-41C Service 3
+pub struct HousekeepingService {
+    reports: BTreeMap<u16, HousekeepingReport>,
+    parameters: BTreeMap<u16, Vec<u8>>, // parameter_id -> current_value
+    next_report_id: u16,
 }
 
 impl HousekeepingService {
-    /// Creates a new housekeeping service.
-    fn new(parent: Arc<dyn Parent>) -> Self {
+    pub fn new() -> Self {
         HousekeepingService {
-            parent,
-            housekeeping_reports: BTreeMap::new(),
+            reports: BTreeMap::new(),
+            parameters: BTreeMap::new(),
+            next_report_id: 1,
         }
     }
-
-    /// Defines a housekeeping report with given parameters.
-    fn define_housekeeping_report(&mut self, report_id: (u32, u32), interval: f64, enabled: bool, parameter_ids: Vec<(u32, u32)>) {
-        let mut report = HousekeepingReport::new(report_id, interval, enabled, parameter_ids);
-        for parameter_id in &report.parameter_ids {
-            let parameter = self.parent.get_parameter(*parameter_id);
-            report.encoding += &parameter.encoding;
+    
+    /// Create a new housekeeping report definition
+    pub fn create_report(&mut self, parameter_ids: Vec<u16>, collection_interval: u32) -> u16 {
+        let report_id = self.next_report_id;
+        self.next_report_id = self.next_report_id.wrapping_add(1);
+        
+        let report = HousekeepingReport {
+            report_id,
+            parameters: parameter_ids.into_iter().map(|id| HousekeepingParameter {
+                parameter_id: id,
+                value: Vec::new(),
+                timestamp: 0,
+            }).collect(),
+            generation_time: 0,
+            enabled: false,
+            collection_interval,
+        };
+        
+        self.reports.insert(report_id, report);
+        report_id
+    }
+    
+    /// Delete a housekeeping report definition
+    pub fn delete_report(&mut self, report_id: u16) -> Result<(), ServiceError> {
+        if self.reports.remove(&report_id).is_some() {
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidPacket)
         }
-        self.housekeeping_reports.insert(report_id, report);
     }
-
-    /// Retrieves a housekeeping report by its ID.
-    fn get_housekeeping_report(&self, report_id: (u32, u32)) -> Option<&HousekeepingReport> {
-        self.housekeeping_reports.get(&report_id)
-    }
-}
-
-/// Controller for the housekeeping service.
-pub struct HousekeepingServiceController {
-    service: HousekeepingService,
-}
-
-impl HousekeepingServiceController {
-    /// Creates a new controller with the given parent.
-    pub fn new(parent: Arc<dyn Parent>) -> Self {
-        HousekeepingServiceController {
-            service: HousekeepingService::new(parent),
+    
+    /// Enable housekeeping report generation
+    pub fn enable_report(&mut self, report_id: u16) -> Result<(), ServiceError> {
+        if let Some(report) = self.reports.get_mut(&report_id) {
+            report.enabled = true;
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidPacket)
         }
     }
-
-    /// Adds housekeeping reports from a JSON file.
-    #[cfg(feature = "std")]
-    pub fn add_housekeeping_reports_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), ()> {
-        // This function requires std for file IO and serde_json
-        // It is feature gated to std only
-        unimplemented!()
+    
+    /// Disable housekeeping report generation
+    pub fn disable_report(&mut self, report_id: u16) -> Result<(), ServiceError> {
+        if let Some(report) = self.reports.get_mut(&report_id) {
+            report.enabled = false;
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidPacket)
+        }
     }
-
-    /// Processes incoming housekeeping data packets.
-    pub fn process(&self, service: u32, subtype: u32, data: Vec<u8>, node_id: u32) {
-        let case = (service, subtype);
-        if case == (3, 25) {
-            let report_id = (node_id, data[0] as u32);
-            let data = &data[1..];
-            if let Some(housekeeping_report) = self.service.get_housekeeping_report(report_id) {
-                let _decoded_data = housekeeping_report.decode(data);
-                let _report: BTreeMap<String, f64> = BTreeMap::new();
-
-                // Assuming decoded_data and report are used here, add closing braces
+    
+    /// Generate housekeeping report
+    pub fn generate_report(&mut self, report_id: u16, current_time: u32) -> Result<Vec<u8>, ServiceError> {
+        if let Some(report) = self.reports.get_mut(&report_id) {
+            let mut response = Vec::new();
+            
+            // Report ID
+            response.extend_from_slice(&report_id.to_be_bytes());
+            
+            // Generation time
+            response.extend_from_slice(&current_time.to_be_bytes());
+            
+            // Number of parameters
+            response.extend_from_slice(&(report.parameters.len() as u16).to_be_bytes());
+            
+            // Parameters
+            for param in &mut report.parameters {
+                // Parameter ID
+                response.extend_from_slice(&param.parameter_id.to_be_bytes());
+                
+                // Get current value from parameters map
+                if let Some(value) = self.parameters.get(&param.parameter_id) {
+                    param.value = value.clone();
+                    param.timestamp = current_time;
+                }
+                
+                // Parameter length
+                response.push(param.value.len() as u8);
+                
+                // Parameter value
+                response.extend_from_slice(&param.value);
+                
+                // Timestamp
+                response.extend_from_slice(&param.timestamp.to_be_bytes());
             }
+            
+            report.generation_time = current_time;
+            Ok(response)
+        } else {
+            Err(ServiceError::InvalidPacket)
         }
+    }
+    
+    /// Update parameter value
+    pub fn update_parameter(&mut self, parameter_id: u16, value: Vec<u8>) {
+        self.parameters.insert(parameter_id, value);
+    }
+    
+    /// Get report status
+    pub fn get_report_status(&self, report_id: u16) -> Option<bool> {
+        self.reports.get(&report_id).map(|r| r.enabled)
+    }
+    
+    /// Get all reports
+    pub fn get_reports(&self) -> Vec<u16> {
+        self.reports.keys().copied().collect()
+    }
+}
+
+impl ServiceHandler for HousekeepingService {
+    fn handle_request(&mut self, subservice: u8, data: &[u8], _source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+        match subservice {
+            1 => {
+                // Create housekeeping report definition
+                if data.len() < 6 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let collection_interval = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+                let param_count = u16::from_be_bytes([data[4], data[5]]);
+                
+                if data.len() < 6 + (param_count as usize * 2) {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let mut parameter_ids = Vec::new();
+                for i in 0..param_count {
+                    let offset = 6 + (i as usize * 2);
+                    let param_id = u16::from_be_bytes([data[offset], data[offset + 1]]);
+                    parameter_ids.push(param_id);
+                }
+                
+                let report_id = self.create_report(parameter_ids, collection_interval);
+                Ok(Some(report_id.to_be_bytes().to_vec()))
+            }
+            2 => {
+                // Delete housekeeping report definition
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let report_id = u16::from_be_bytes([data[0], data[1]]);
+                self.delete_report(report_id)?;
+                Ok(None)
+            }
+            3 => {
+                // Enable housekeeping report generation
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let report_id = u16::from_be_bytes([data[0], data[1]]);
+                self.enable_report(report_id)?;
+                Ok(None)
+            }
+            4 => {
+                // Disable housekeeping report generation
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let report_id = u16::from_be_bytes([data[0], data[1]]);
+                self.disable_report(report_id)?;
+                Ok(None)
+            }
+            25 => {
+                // Generate housekeeping report
+                if data.len() < 6 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let report_id = u16::from_be_bytes([data[0], data[1]]);
+                let current_time = u32::from_be_bytes([data[2], data[3], data[4], data[5]]);
+                
+                let response = self.generate_report(report_id, current_time)?;
+                Ok(Some(response))
+            }
+            _ => Err(ServiceError::UnknownService),
+        }
+    }
+    
+    fn get_service_type(&self) -> u8 {
+        ST03_HOUSEKEEPING
     }
 }

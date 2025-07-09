@@ -1,8 +1,6 @@
 extern crate alloc;
 
-#[cfg(feature = "std")]
-use std::println;
-#[cfg(not(feature = "std"))]
+// println macro for no_std compatibility
 macro_rules! println {
     ($($arg:tt)*) => {};
 }

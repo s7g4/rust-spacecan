@@ -1,189 +1,97 @@
-
-
 extern crate alloc;
 
-use alloc::sync::Arc;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
-#[cfg(not(feature = "std"))]
-use cortex_m::interrupt::Mutex;
+use alloc::vec::Vec;
+use core::fmt;
+use super::can_frame::{CanFrame, CanFrameError};
+use crate::constants::ID_HEARTBEAT;
 
-use core::time::Duration;
-#[cfg(feature = "std")]
-use std::thread;
-#[cfg(feature = "std")]
-use std::time::Instant;
-
-use super::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
-use crate::primitives::network::Parent;
-
-const ID_HEARTBEAT: u32 = 0x700;
-
-/// Timer struct to handle periodic heartbeat signals.
-struct Timer {
-    period: Duration,
-    callback: Arc<dyn Fn() + Send + Sync>,
-    running: Arc<Mutex<bool>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeartbeatError {
+    InvalidData,
+    SendFailed,
 }
 
-impl Timer {
-    /// Creates a new timer with the specified period and callback.
-    fn new(period: Duration, callback: Arc<dyn Fn() + Send + Sync>) -> Self {
-        Timer {
-            period,
-            callback,
-            running: Arc::new(Mutex::new(false)),
+impl fmt::Display for HeartbeatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HeartbeatError::InvalidData => write!(f, "Invalid heartbeat data"),
+            HeartbeatError::SendFailed => write!(f, "Failed to send heartbeat"),
         }
     }
-
-    /// Starts the timer, invoking the callback periodically.
-    #[cfg(feature = "std")]
-    fn start(&self) {
-        let running = Arc::clone(&self.running);
-        let callback = Arc::clone(&self.callback);
-        let period = self.period;
-        *running.lock().unwrap() = true;
-
-        std::thread::spawn(move || {
-            while *running.lock().unwrap() {
-                std::thread::sleep(period);
-                callback();
-            }
-        });
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn start(&self) {
-        // No-op or alternative implementation for no_std
-    }
-
-    /// Stops the timer.
-    #[cfg(feature = "std")]
-    fn stop(&self) {
-        *self.running.lock().unwrap() = false;
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn stop(&self) {
-        // no_std alternative implementation if needed
-    }
 }
 
-/// HeartbeatProducer struct to send periodic heartbeats.
-pub struct HeartbeatProducer {
-    parent: Arc<dyn Parent>,
-    running: bool,
-    timer: Option<Timer>,
-    period: Option<Duration>,
-    can_frame: CanFrame,
+#[derive(Debug)]
+pub struct HeartbeatData {
+    pub node_id: u32,
+    pub status: u8,
+    pub timestamp: u32,
 }
 
-impl HeartbeatProducer {
-    /// Creates a new HeartbeatProducer.
-    pub fn new(parent: Arc<dyn Parent>) -> Result<Self, CanFrameError> {
-        let can_frame = CanFrame::new(ID_HEARTBEAT, None)?;
-        Ok(HeartbeatProducer {
-            parent,
-            running: false,
-            timer: None,
-            period: None,
-            can_frame,
+impl HeartbeatData {
+    pub fn new(node_id: u32, status: u8, timestamp: u32) -> Self {
+        HeartbeatData {
+            node_id,
+            status,
+            timestamp,
+        }
+    }
+    
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(5);
+        bytes.push(self.status);
+        bytes.extend_from_slice(&self.timestamp.to_be_bytes());
+        bytes
+    }
+    
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, HeartbeatError> {
+        if bytes.len() < 5 {
+            return Err(HeartbeatError::InvalidData);
+        }
+        
+        let status = bytes[0];
+        let timestamp = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+        
+        Ok(HeartbeatData {
+            node_id: 0, // Will be set from CAN frame
+            status,
+            timestamp,
         })
     }
-
-    /// Sends a heartbeat CAN frame.
-    pub fn send(&self) -> Result<(), CanFrameError> {
-        self.parent.send(&self.can_frame)
-    }
-
-    /// Starts sending heartbeats periodically with the given period.
-    pub fn start(&mut self, period: Duration) {
-        self.period = Some(period);
-        if self.running {
-            self.stop();
-        }
-        self.running = true;
-        let parent_clone = Arc::clone(&self.parent);
-        let frame_clone = self.can_frame.clone();
-
-        let timer = Timer::new(period, Arc::new(move || {
-            let _ = parent_clone.send(&frame_clone);
-        }));
-        self.timer = Some(timer);
-        self.timer.as_ref().unwrap().start();
-    }
-
-    /// Stops sending heartbeats.
-    pub fn stop(&mut self) {
-        self.running = false;
-        if let Some(timer) = self.timer.take() {
-            timer.stop();
-        }
-    }
 }
 
-/// HeartbeatConsumer struct to monitor received heartbeats.
-pub struct HeartbeatConsumer {
-    #[cfg(feature = "std")]
-    last_received: Arc<Mutex<Option<Instant>>>,
-    #[cfg(not(feature = "std"))]
-    last_received: Arc<Mutex<Option<()>>>,
-    timeout: Duration,
+pub struct HeartbeatManager {
+    node_id: u32,
+    status: u8,
 }
 
-impl HeartbeatConsumer {
-    /// Creates a new HeartbeatConsumer with the specified timeout.
-    pub fn new(timeout: Duration) -> Self {
-        HeartbeatConsumer {
-            #[cfg(feature = "std")]
-            last_received: Arc::new(Mutex::new(None)),
-            #[cfg(not(feature = "std"))]
-            last_received: Arc::new(Mutex::new(None)),
-            timeout,
+impl HeartbeatManager {
+    pub fn new(node_id: u32) -> Self {
+        HeartbeatManager {
+            node_id,
+            status: 0,
         }
     }
-
-    /// Records the receipt of a heartbeat.
-    #[cfg(feature = "std")]
-    pub fn receive_heartbeat(&self) {
-        let mut last_received = self.last_received.lock().unwrap();
-        *last_received = Some(Instant::now());
+    
+    pub fn set_status(&mut self, status: u8) {
+        self.status = status;
     }
-
-    #[cfg(not(feature = "std"))]
-    pub fn receive_heartbeat(&self) {
-        // No-op or alternative implementation for no_std
+    
+    pub fn create_heartbeat(&self, timestamp: u32) -> Result<CanFrame, HeartbeatError> {
+        let heartbeat_data = HeartbeatData::new(self.node_id, self.status, timestamp);
+        let can_id = ID_HEARTBEAT | self.node_id;
+        
+        CanFrame::new(can_id, Some(heartbeat_data.to_bytes()))
+            .map_err(|_| HeartbeatError::SendFailed)
     }
-
-    /// Checks if the heartbeat has timed out.
-    #[cfg(feature = "std")]
-    pub fn check_timeout(&self) -> bool {
-        let last_received = self.last_received.lock().unwrap();
-        if let Some(last) = *last_received {
-            return last.elapsed() > self.timeout;
+    
+    pub fn parse_heartbeat(&self, frame: &CanFrame) -> Result<HeartbeatData, HeartbeatError> {
+        if (frame.can_id() & !crate::constants::NODE_ID_MASK) != ID_HEARTBEAT {
+            return Err(HeartbeatError::InvalidData);
         }
-        true
-    }
-
-    #[cfg(not(feature = "std"))]
-    pub fn check_timeout(&self) -> bool {
-        // Always timeout in no_std or implement alternative logic
-        true
-    }
-}
-
-/// Heartbeat struct for main.rs usage.
-pub struct Heartbeat {
-    pub uptime: u32,
-    pub status: u8,
-}
-
-impl Heartbeat {
-    /// Converts the Heartbeat struct to a payload byte vector.
-    pub fn to_payload(&self) -> alloc::vec::Vec<u8> {
-        let mut payload = alloc::vec::Vec::new();
-        payload.extend(&self.uptime.to_be_bytes());
-        payload.push(self.status);
-        payload
+        
+        let mut heartbeat_data = HeartbeatData::from_bytes(frame.data())?;
+        heartbeat_data.node_id = frame.get_node_id();
+        
+        Ok(heartbeat_data)
     }
 }

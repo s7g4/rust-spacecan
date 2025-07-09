@@ -1,158 +1,179 @@
 extern crate alloc;
 
-use alloc::string::String;
-use alloc::vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
-#[cfg(feature = "std")]
-use std::string::ToString;
-use alloc::boxed::Box;
+use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use core::option::Option;
-use core::option::Option::{Some, None};
-use core::result::Result;
-use core::result::Result::{Ok, Err};
-use core::mem::size_of;
-use alloc::format;
+use alloc::string::String;
+use crate::services::core::{ServiceHandler, ServiceError};
+use crate::constants::ST20_PARAMETER_MANAGEMENT;
 
-#[cfg(feature = "std")]
-use std::io::{self, BufReader};
-#[cfg(feature = "std")]
-use std::fs::File;
-#[cfg(feature = "std")]
-use serde_json::Value;
-
-#[derive(Debug)]
-struct Packet {
-    data: Vec<u8>,
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub parameter_id: u16,
+    pub parameter_name: String,
+    pub value: Vec<u8>,
+    pub read_only: bool,
+    pub last_update: u32,
 }
 
-impl Packet {
-    fn new(data: Vec<u8>) -> Self {
-        Packet { data }
-    }
-}
-
-trait Parent {
-    fn send(&self, packet: Packet, node_id: u32);
-    fn request_verification(&self) -> &dyn RequestVerification;
-}
-
-trait RequestVerification {
-    fn send_success_acceptance_report(&self, args: &[u8]);
-    fn send_success_completion_report(&self, args: &[u8]);
-    fn send_fail_acceptance_report(&self, args: &[u8]);
-    fn send_fail_completion_report(&self, args: &[u8]);
-}
-
-#[derive(Debug)]
-struct Parameter {
-    parameter_id: (u32, u32),
-    parameter_name: String,
-    encoding: String,
-    value: f64,
-}
-
-impl Parameter {
-    fn new(parameter_id: (u32, u32), parameter_name: String, encoding: String, value: f64) -> Self {
-        Parameter {
-            parameter_id,
-            parameter_name,
-            encoding,
-            value,
-        }
-    }
-
-    fn encode(&self) -> Vec<u8> {
-        let _encoding = if self.encoding.starts_with("!") {
-            &self.encoding
-        } else {
-            &format!("!{}", self.encoding)
-        };
-        let size = self.get_encoded_size();
-        let buffer = vec![0; size];
-        buffer
-    }
-
-    fn decode(&self, _data: &[u8]) -> f64 {
-        let _encoding = if self.encoding.starts_with("!") {
-            &self.encoding
-        } else {
-            &format!("!{}", self.encoding)
-        };
-        0.0
-    }
-
-    fn get_encoded_size(&self) -> usize {
-        size_of::<f64>()
-    }
-}
-
-struct ParameterManagementService {
-    parent: Box<dyn Parent>,
-    parameter_pool: BTreeMap<(u32, u32), Parameter>,
+/// ST20 Parameter Management Service
+/// Implements ECSS-E-ST-70-41C Service 20
+pub struct ParameterManagementService {
+    parameters: BTreeMap<u16, Parameter>,
+    next_parameter_id: u16,
 }
 
 impl ParameterManagementService {
-    fn new(parent: Box<dyn Parent>) -> Self {
+    pub fn new() -> Self {
         ParameterManagementService {
-            parent,
-            parameter_pool: BTreeMap::new(),
+            parameters: BTreeMap::new(),
+            next_parameter_id: 1,
         }
     }
-
-    fn add_parameter(&mut self, parameter: Parameter) {
-        self.parameter_pool.insert(parameter.parameter_id, parameter);
-    }
-
-    fn get_parameter(&self, parameter_id: (u32, u32)) -> Option<&Parameter> {
-        self.parameter_pool.get(&parameter_id)
-    }
-
-    fn set_parameter_value(&mut self, parameter_id: (u32, u32), value: f64) {
-        if let Some(param) = self.parameter_pool.get_mut(&parameter_id) {
-            param.value = value;
-        }
-    }
-
-    fn get_parameter_value(&self, parameter_id: (u32, u32)) -> Option<f64> {
-        self.parameter_pool.get(&parameter_id).map(|p| p.value)
-    }
-
-    fn get_parameter_encoding(&self, parameter_id: (u32, u32)) -> Option<&String> {
-        self.parameter_pool.get(&parameter_id).map(|p| &p.encoding)
-    }
-}
-
-pub struct ParameterManagementServiceController {
-    service: ParameterManagementService,
-}
-
-impl ParameterManagementServiceController {
-    pub fn new(parent: Box<dyn Parent>) -> Self {
-        ParameterManagementServiceController {
-            service: ParameterManagementService::new(parent),
-        }
-    }
-
-    #[cfg(feature = "std")]
-    pub fn add_parameters_from_file(&mut self, filepath: &str, node_id: u32) -> Result<(), std::io::Error> {
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-        let json: Value = serde_json::from_reader(reader)?;
-
-        if let Some(list_of_dicts) = json["parameters"].as_array() {
-            for param in list_of_dicts {
-                let parameter_id = (node_id, param["parameter_id"].as_u64().unwrap() as u32);
-                let parameter_name = param["parameter_name"].as_str().unwrap().to_string();
-
-                let encoding = param["encoding"].as_str().unwrap().to_string();
-                let value = 0.0;
-
-                let parameter = Parameter::new(parameter_id, parameter_name, encoding, value);
-                self.service.add_parameter(parameter);
+    
+    /// Report parameter values
+    pub fn report_parameter_values(&self, parameter_ids: Vec<u16>) -> Result<Vec<u8>, ServiceError> {
+        let mut response = Vec::new();
+        
+        // Number of parameters
+        response.extend_from_slice(&(parameter_ids.len() as u16).to_be_bytes());
+        
+        for param_id in parameter_ids {
+            if let Some(parameter) = self.parameters.get(&param_id) {
+                // Parameter ID
+                response.extend_from_slice(&param_id.to_be_bytes());
+                
+                // Parameter value length
+                response.push(parameter.value.len() as u8);
+                
+                // Parameter value
+                response.extend_from_slice(&parameter.value);
+                
+                // Last update timestamp
+                response.extend_from_slice(&parameter.last_update.to_be_bytes());
+            } else {
+                return Err(ServiceError::InvalidPacket);
             }
         }
-        Ok(())
+        
+        Ok(response)
+    }
+    
+    /// Set parameter values
+    pub fn set_parameter_values(&mut self, updates: Vec<(u16, Vec<u8>)>, current_time: u32) -> Result<Vec<u8>, ServiceError> {
+        let mut response = Vec::new();
+        let mut success_count = 0u16;
+        
+        for (param_id, new_value) in updates {
+            if let Some(parameter) = self.parameters.get_mut(&param_id) {
+                if !parameter.read_only {
+                    parameter.value = new_value;
+                    parameter.last_update = current_time;
+                    success_count += 1;
+                }
+            }
+        }
+        
+        response.extend_from_slice(&success_count.to_be_bytes());
+        Ok(response)
+    }
+    
+    /// Register a parameter
+    pub fn register_parameter(&mut self, parameter_name: String, initial_value: Vec<u8>, read_only: bool) -> u16 {
+        let parameter_id = self.next_parameter_id;
+        self.next_parameter_id = self.next_parameter_id.wrapping_add(1);
+        
+        let parameter = Parameter {
+            parameter_id,
+            parameter_name,
+            value: initial_value,
+            read_only,
+            last_update: 0,
+        };
+        
+        self.parameters.insert(parameter_id, parameter);
+        parameter_id
+    }
+    
+    /// Get parameter value
+    pub fn get_parameter_value(&self, parameter_id: u16) -> Option<&Vec<u8>> {
+        self.parameters.get(&parameter_id).map(|p| &p.value)
+    }
+    
+    /// Get all parameters
+    pub fn get_parameters(&self) -> Vec<u16> {
+        self.parameters.keys().copied().collect()
+    }
+    
+    /// Get parameter info
+    pub fn get_parameter_info(&self, parameter_id: u16) -> Option<&Parameter> {
+        self.parameters.get(&parameter_id)
+    }
+}
+
+impl ServiceHandler for ParameterManagementService {
+    fn handle_request(&mut self, subservice: u8, data: &[u8], _source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+        match subservice {
+            21 => {
+                // Report parameter values
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let param_count = u16::from_be_bytes([data[0], data[1]]);
+                
+                if data.len() < 2 + (param_count as usize * 2) {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let mut parameter_ids = Vec::new();
+                for i in 0..param_count {
+                    let offset = 2 + (i as usize * 2);
+                    let param_id = u16::from_be_bytes([data[offset], data[offset + 1]]);
+                    parameter_ids.push(param_id);
+                }
+                
+                let response = self.report_parameter_values(parameter_ids)?;
+                Ok(Some(response))
+            }
+            23 => {
+                // Set parameter values
+                if data.len() < 6 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let current_time = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+                let param_count = u16::from_be_bytes([data[4], data[5]]);
+                
+                let mut updates = Vec::new();
+                let mut offset = 6;
+                
+                for _ in 0..param_count {
+                    if offset + 3 > data.len() {
+                        return Err(ServiceError::InvalidPacket);
+                    }
+                    
+                    let param_id = u16::from_be_bytes([data[offset], data[offset + 1]]);
+                    let value_len = data[offset + 2] as usize;
+                    offset += 3;
+                    
+                    if offset + value_len > data.len() {
+                        return Err(ServiceError::InvalidPacket);
+                    }
+                    
+                    let value = data[offset..offset + value_len].to_vec();
+                    offset += value_len;
+                    
+                    updates.push((param_id, value));
+                }
+                
+                let response = self.set_parameter_values(updates, current_time)?;
+                Ok(Some(response))
+            }
+            _ => Err(ServiceError::UnknownService),
+        }
+    }
+    
+    fn get_service_type(&self) -> u8 {
+        ST20_PARAMETER_MANAGEMENT
     }
 }

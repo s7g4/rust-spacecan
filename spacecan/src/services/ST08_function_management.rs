@@ -1,171 +1,123 @@
-#[cfg(feature = "std")]
-use std::vec::Vec;
-#[cfg(feature = "std")]
-use std::string::String;
-#[cfg(feature = "std")]
-use std::string::ToString;
-#[cfg(feature = "std")]
-use serde_json::{from_str, to_string, Error as SerdeError};
-
 extern crate alloc;
 
-use alloc::format;
+use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
+use alloc::string::String;
+use crate::services::core::{ServiceHandler, ServiceError};
+use crate::constants::ST08_FUNCTION_MANAGEMENT;
 
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub function_id: u16,
+    pub function_name: String,
+    pub enabled: bool,
+    pub arguments: Vec<u8>,
+}
+
+/// ST08 Function Management Service
+/// Implements ECSS-E-ST-70-41C Service 8
+pub struct FunctionManagementService {
+    functions: BTreeMap<u16, Function>,
+    next_function_id: u16,
+}
 
 impl FunctionManagementService {
-    /// Creates a new function management service.
-    pub fn new(parent: &'static dyn Parent) -> Self {
+    pub fn new() -> Self {
         FunctionManagementService {
-            parent,
-            function_pool: BTreeMap::new(),
+            functions: BTreeMap::new(),
+            next_function_id: 1,
         }
     }
-
-    pub fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32) {
-        // Implementation of process method
-    }
-}
-
-use core::option::Option;
-use core::result::Result;
-
-/// Represents a packet with data payload.
-pub struct Packet {
-    data: Vec<u8>,
-}
-
-/// Trait defining the parent interface for sending packets.
-pub trait Parent {
-    /// Sends a packet.
-    fn send(&self, packet: Packet);
-}
-
-/// Represents an argument of a function.
-#[derive(Debug)]
-struct Argument {
-    argument_id: u32,
-    argument_name: String,
-    encoding: String,
-}
-
-impl Argument {
-    /// Creates a new argument.
-    fn new(argument_id: u32, argument_name: String, encoding: String) -> Self {
-        Argument {
-            argument_id,
-            argument_name,
-            encoding,
+    
+    /// Perform function
+    pub fn perform_function(&mut self, function_id: u16, arguments: Vec<u8>) -> Result<Vec<u8>, ServiceError> {
+        if let Some(function) = self.functions.get(&function_id) {
+            if function.enabled {
+                // Simulate function execution
+                let mut response = Vec::new();
+                response.extend_from_slice(&function_id.to_be_bytes());
+                response.push(0); // Success status
+                response.extend_from_slice(&arguments); // Echo arguments as result
+                Ok(response)
+            } else {
+                Err(ServiceError::ProcessingFailed)
+            }
+        } else {
+            Err(ServiceError::InvalidPacket)
         }
     }
-
-    /// Encodes a value according to the argument's encoding.
-    fn encode(&self, _value: f64) -> Vec<u8> {
-        let _encoding = if self.encoding.starts_with("!") {
-            &self.encoding
-        } else {
-            &format!("!{}", self.encoding)
-        };
-        // Use the appropriate encoding logic here.
-        // For demonstration, we will just return a placeholder.
-        Vec::new() // Placeholder for actual encoding.
-    }
-
-    /// Decodes bytes into a value according to the argument's encoding.
-    fn decode(&self, _data: &[u8]) -> f64 {
-        let _encoding = if self.encoding.starts_with("!") {
-            &self.encoding
-        } else {
-            &format!("!{}", self.encoding)
-        };
-        // Use the appropriate decoding logic here.
-        // For demonstration, we will just return a placeholder.
-        0.0 // Placeholder for actual decoding.
-    }
-
-    /// Returns the encoded size of the argument.
-    fn get_encoded_size(&self) -> usize {
-        // Calculate the size based on the encoding.
-        // For demonstration, we will just return a placeholder.
-        8 // Placeholder for actual size.
-    }
-}
-
-/// Represents a function with arguments.
-#[derive(Debug)]
-struct Function {
-    function_id: u32,
-    function_name: String,
-    arguments: BTreeMap<u32, Argument>,
-}
-
-impl Function {
-    /// Creates a new function with optional arguments.
-    fn new(function_id: u32, function_name: String, arguments: Option<Vec<Argument>>) -> Self {
-        let mut function = Function {
+    
+    /// Register a function
+    pub fn register_function(&mut self, function_name: String) -> u16 {
+        let function_id = self.next_function_id;
+        self.next_function_id = self.next_function_id.wrapping_add(1);
+        
+        let function = Function {
             function_id,
             function_name,
-            arguments: BTreeMap::new(),
+            enabled: true,
+            arguments: Vec::new(),
         };
-        if let Some(args) = arguments {
-            for arg in args {
-                function.add_argument(arg);
-            }
+        
+        self.functions.insert(function_id, function);
+        function_id
+    }
+    
+    /// Enable function
+    pub fn enable_function(&mut self, function_id: u16) -> Result<(), ServiceError> {
+        if let Some(function) = self.functions.get_mut(&function_id) {
+            function.enabled = true;
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidPacket)
         }
-        function
     }
-
-    /// Adds an argument to the function.
-    fn add_argument(&mut self, argument: Argument) {
-        self.arguments.insert(argument.argument_id, argument);
+    
+    /// Disable function
+    pub fn disable_function(&mut self, function_id: u16) -> Result<(), ServiceError> {
+        if let Some(function) = self.functions.get_mut(&function_id) {
+            function.enabled = false;
+            Ok(())
+        } else {
+            Err(ServiceError::InvalidPacket)
+        }
     }
-
-    /// Retrieves an argument by its ID.
-    fn get_argument(&self, argument_id: u32) -> Option<&Argument> {
-        self.arguments.get(&argument_id)
+    
+    /// Get function status
+    pub fn get_function_status(&self, function_id: u16) -> Option<bool> {
+        self.functions.get(&function_id).map(|f| f.enabled)
+    }
+    
+    /// Get all registered functions
+    pub fn get_functions(&self) -> Vec<u16> {
+        self.functions.keys().copied().collect()
     }
 }
 
-/// Service managing functions.
-pub struct FunctionManagementService {
-    parent: &'static dyn Parent,
-    function_pool: BTreeMap<u32, Function>,
-}
-
-impl FunctionManagementService {
-    /// Retrieves a function by its ID.
-    fn get_function(&self, function_id: u32) -> Option<&Function> {
-        self.function_pool.get(&function_id)
-    }
-
-    /// Adds a function to the pool.
-    fn add_function(&mut self, function: Function) {
-        self.function_pool.insert(function.function_id, function);
-    }
-
-    /// Adds functions from a JSON string slice.
-    #[cfg(feature = "std")]
-    fn add_functions_from_json(&mut self, json_str: &str, node_id: u32) -> Result<(), SerdeError> {
-        let json: serde_json::Value = from_str(json_str)?;
-
-        if let Some(list_of_dicts) = json["functions"].as_array() {
-            for function in list_of_dicts {
-                let function_id = function["function_id"].as_u64().unwrap() as u32;
-                let function_name = function["function_name"].as_str().unwrap().to_string();
-                let arguments = function["arguments"].as_array().map(|args| {
-                    args.iter().map(|arg| {
-                        Argument::new(
-                            arg["argument_id"].as_u64().unwrap() as u32,
-                            arg["argument_name"].as_str().unwrap().to_string(),
-                            arg["encoding"].as_str().unwrap().to_string(),
-                        )
-                    }).collect()
-                });
-
-                let function = Function::new(function_id, function_name, arguments);
-                self.add_function(function);
+impl ServiceHandler for FunctionManagementService {
+    fn handle_request(&mut self, subservice: u8, data: &[u8], _source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+        match subservice {
+            1 => {
+                // Perform function
+                if data.len() < 2 {
+                    return Err(ServiceError::InvalidPacket);
+                }
+                
+                let function_id = u16::from_be_bytes([data[0], data[1]]);
+                let arguments = if data.len() > 2 {
+                    data[2..].to_vec()
+                } else {
+                    Vec::new()
+                };
+                
+                let response = self.perform_function(function_id, arguments)?;
+                Ok(Some(response))
             }
+            _ => Err(ServiceError::UnknownService),
         }
-        Ok(())
+    }
+    
+    fn get_service_type(&self) -> u8 {
+        ST08_FUNCTION_MANAGEMENT
     }
 }

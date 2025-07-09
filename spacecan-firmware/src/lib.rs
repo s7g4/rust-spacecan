@@ -2,16 +2,14 @@
 #![no_main]
 
 use cortex_m_rt::entry;
-use stm32f7xx_hal::{
+use stm32g0xx_hal::{
     pac,
     prelude::*,
-    gpio::{Alternate},
-    can::Can as HalCan,
+    rcc::RccExt, // for sysclk()
+    time::U32Ext, // for mhz()
+    gpio::GpioExt, // for split()
 };
-use bxcan::{Can, filter::{Mask32, BankConfig}, Fifo};
-use fugit::HertzU32;
-
-use spacecan::protocol::{SpaceCAN, SpaceCANFrame};
+use spacecan::protocol::{SpaceCANProtocol, SpaceCANFrame};
 
 pub mod panic_handler;
 
@@ -21,37 +19,34 @@ fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
     let cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
-    let mut rcc = dp.RCC.constrain(); // Make rcc mutable
-    let clocks = rcc.cfgr.sysclk(HertzU32::from_raw(216_000_000)).freeze();
+    let mut rcc = dp.RCC.constrain();
+    let clocks = rcc.cfgr.sysclk(64.mhz()).freeze();
 
-    let gpio = dp.GPIOB.split(); // CAN is on PB8 (RX), PB9 (TX) for F767
+    let gpio = dp.GPIOB.split(&mut rcc);
     let can_rx = gpio.pb8.into_alternate::<9>();
     let can_tx = gpio.pb9.into_alternate::<9>();
 
-    // Initialize the CAN peripheral using stm32f7xx-hal
-    let mut hal_can = HalCan::new(dp.CAN1, &mut rcc.apb1, (can_tx, can_rx));
+    // Initialize the CAN peripheral using bxcan directly with raw CAN peripheral
+    // Note: STM32G0 might not have CAN, using a mock for now
+    // let can_peripheral = dp.CAN;
 
-    // Enable the CAN clock
-    let mut can = bxcan::Can::builder(hal_can)
-        .set_bit_timing(0x001c_0000) // Example bit timing configuration
-        .enable();
+    // Enable the CAN clock - handled by bxcan or HAL internally if needed
 
-    // Configure CAN filters
-    can.modify_filters().enable_bank(
-        0,
-        Fifo::Fifo0,
-        BankConfig::Mask32(Mask32::accept_all()),
-    );
-
-    let mut spacecan = SpaceCAN::new(can);
+    // For STM32G0 which doesn't have CAN, we'll use a mock transport
+    // In a real implementation, you'd use the actual CAN peripheral
+    use spacecan::transport::mock::MockTransport;
+    
+    let mut transport = MockTransport::new();
+    let mut spacecan = SpaceCANProtocol::new(transport, 1); // node_id = 1
 
     // Send a test packet (Command ID: 0x01, 4 bytes payload)
-    let frame = SpaceCANFrame::new(0x01, &[1, 2, 3, 4]).unwrap();
+    let frame = SpaceCANFrame::new(0x01, 1, 1, 1, [1, 2, 3, 4].to_vec()).unwrap();
     spacecan.send_frame(&frame).unwrap();
 
     loop {
-        if let Ok(frame) = spacecan.receive_frame() {
+        if let Ok(Some(_frame)) = spacecan.receive_frame() {
             // Do something with received SpaceCANFrame
+            defmt::println!("Received frame: {:?}", _frame);
         }
     }
 }

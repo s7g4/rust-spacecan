@@ -1,15 +1,24 @@
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
 extern crate alloc;
 
-use alloc::sync::Arc;
-use cortex_m::interrupt::{Mutex, free as interrupt_free};
 use alloc::vec::Vec;
 use core::option::Option;
 use core::option::Option::{Some, None};
 use core::result::Result;
 use core::result::Result::{Ok, Err};
 use core::cell::UnsafeCell;
-use core::borrow::Borrow;
+
+#[cfg(feature = "embedded")]
+use cortex_m::interrupt::{Mutex, free as interrupt_free};
+
+#[cfg(not(feature = "embedded"))]
+fn interrupt_free<F, R>(f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    // Simple critical section simulation for non-embedded
+    f()
+}
 
 // Define a trait for Bus operations
 pub trait Bus {
@@ -35,10 +44,20 @@ impl BusImpl {
 
 impl Bus for BusImpl {
     fn flush_frame_buffer(&self) {
-        interrupt_free(|_cs| {
-            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
-            buffer.clear();
-        });
+        #[cfg(feature = "embedded")]
+        {
+            interrupt_free(|_cs| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                buffer.clear();
+            });
+        }
+        #[cfg(not(feature = "embedded"))]
+        {
+            interrupt_free(|| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                buffer.clear();
+            });
+        }
     }
     
     fn start_receive(&self) {
@@ -50,19 +69,39 @@ impl Bus for BusImpl {
     }
     
     fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError> {
-        interrupt_free(|_cs| {
-            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
-            buffer.push(can_frame.clone());
-        });
+        #[cfg(feature = "embedded")]
+        {
+            interrupt_free(|_cs| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                buffer.push(can_frame.clone());
+            });
+        }
+        #[cfg(not(feature = "embedded"))]
+        {
+            interrupt_free(|| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                buffer.push(can_frame.clone());
+            });
+        }
         Ok(())
     }
     
     fn get_frame(&self) -> Option<CanFrame> {
         let mut frame = None;
-        interrupt_free(|_cs| {
-            let buffer = unsafe { &mut *self.buffer.get() }; // Use UnsafeCell::get
-            frame = buffer.pop();
-        });
+        #[cfg(feature = "embedded")]
+        {
+            interrupt_free(|_cs| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                frame = buffer.pop();
+            });
+        }
+        #[cfg(not(feature = "embedded"))]
+        {
+            interrupt_free(|| {
+                let buffer = unsafe { &mut *self.buffer.get() };
+                frame = buffer.pop();
+            });
+        }
         frame
     }
 }

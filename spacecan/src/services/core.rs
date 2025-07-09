@@ -1,196 +1,92 @@
-
 extern crate alloc;
 
-use cortex_m::interrupt::Mutex;
-use alloc::sync::Arc;
-use alloc::vec;
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use alloc::format;
-use alloc::string::String;
-use alloc::string::ToString;
+use alloc::boxed::Box;
+use core::fmt;
+use crate::protocol::SpaceCANFrame;
+use crate::constants::*;
 
-/// Trait for processing packets.
-trait PacketProcessor {
-    /// Processes a packet with given service, subtype, data, and node ID.
-    fn process(&self, service: u8, subtype: u8, data: Vec<u8>, node_id: u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceError {
+    UnknownService,
+    InvalidPacket,
+    ProcessingFailed,
+    ServiceNotRegistered,
 }
 
-/// Service managing packet utilization and dispatching to responders.
-struct PacketUtilizationService {
-    /// Optional packet monitor callback.
-    packet_monitor: Option<Arc<dyn Fn(u8, u8, Vec<u8>, u32) + Send + Sync>>,
-    /// Optional request verification responder.
-    request_verification: Option<Arc<RequestVerificationServiceResponder>>,
-    /// Optional housekeeping responder.
-    housekeeping: Option<Arc<HousekeepingServiceResponder>>,
-    /// Optional function management responder.
-    function_management: Option<Arc<FunctionManagementServiceResponder>>,
-    /// Optional test responder.
-    test: Option<Arc<TestServiceResponder>>,
-    /// Optional parameter management responder.
-    parameter_management: Option<Arc<ParameterManagementServiceResponder>>,
-}
-
-impl PacketUtilizationService {
-    /// Creates a new PacketUtilizationService with no responders.
-    fn new() -> Self {
-        Self {
-            packet_monitor: None,
-            request_verification: None,
-            housekeeping: None,
-            function_management: None,
-            test: None,
-            parameter_management: None,
+impl fmt::Display for ServiceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ServiceError::UnknownService => write!(f, "Unknown service type"),
+            ServiceError::InvalidPacket => write!(f, "Invalid packet format"),
+            ServiceError::ProcessingFailed => write!(f, "Service processing failed"),
+            ServiceError::ServiceNotRegistered => write!(f, "Service not registered"),
         }
     }
 }
 
-/// Controller for PacketUtilizationService managing packet reception.
-struct PacketUtilizationServiceController {
-    parent: Arc<Mutex<PacketUtilizationService>>,
+/// Trait for service handlers
+pub trait ServiceHandler {
+    fn handle_request(&mut self, subservice: u8, data: &[u8], source_node: u32) -> Result<Option<Vec<u8>>, ServiceError>;
+    fn get_service_type(&self) -> u8;
 }
 
-impl Clone for PacketUtilizationServiceController {
-    fn clone(&self) -> Self {
-        PacketUtilizationServiceController {
-            parent: Arc::clone(&self.parent),
+/// Main service manager for handling ECSS services
+pub struct ServiceManager {
+    services: BTreeMap<u8, Box<dyn ServiceHandler>>,
+    node_id: u32,
+}
+
+impl ServiceManager {
+    pub fn new(node_id: u32) -> Self {
+        ServiceManager {
+            services: BTreeMap::new(),
+            node_id,
         }
     }
-}
-
-impl PacketUtilizationServiceController {
-    /// Creates a new controller and initializes responders.
-    fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
-        let controller = Self { parent: parent.clone() };
-
-        let _responder = Arc::new(PacketUtilizationServiceResponder::new(parent.clone()));
-
-        // Using cortex_m::interrupt::Mutex, lock() is not available, so this is a placeholder
-        // Actual implementation should use critical sections to access Mutex data
-        // For now, assume parent is accessible and set responders accordingly
-
-        controller
+    
+    /// Register a service handler
+    pub fn register_service(&mut self, service: Box<dyn ServiceHandler>) {
+        let service_type = service.get_service_type();
+        self.services.insert(service_type, service);
     }
-
-    /// Handles a received packet by dispatching to appropriate responder.
-    fn received_packet(&self, data: Vec<u8>, _node_id: u32) {
-        if data.len() < 2 {
-            // No std println, so just return silently or handle error differently
-            return;
-        }
-
-        let service = data[0];
-        let _subtype = data[1];
-        let _payload = data[2..].to_vec();
-
-        // Using cortex_m::interrupt::Mutex, lock() is not available, so this is a placeholder
-        // Actual implementation should use critical sections to access Mutex data
-        // For now, assume parent is accessible and call process synchronously
-
-        // Invoke packet monitor callback if set.
-        // Assuming safe access to packet_monitor
-        // if let Some(monitor) = self.parent.packet_monitor.clone() {
-        //     monitor(service, subtype, payload.clone(), node_id);
-        // }
-
-        // Dispatch to appropriate responder synchronously
-        match service {
-            1 => {
-                // if let Some(rv) = request_verification {
-                //     rv.process(service, subtype, payload.clone(), node_id);
-                // }
+    
+    /// Process an incoming SpaceCAN frame
+    pub fn process_frame(&mut self, frame: &SpaceCANFrame) -> Result<Option<SpaceCANFrame>, ServiceError> {
+        let service_type = frame.service_type;
+        let subservice = frame.subservice_type;
+        let source_node = frame.node_id;
+        
+        if let Some(service) = self.services.get_mut(&service_type) {
+            match service.handle_request(subservice, &frame.data, source_node) {
+                Ok(Some(response_data)) => {
+                    // Create response frame
+                    let response_frame = SpaceCANFrame::new(
+                        frame.can_id, // Use same CAN ID
+                        service_type,
+                        subservice,
+                        self.node_id,
+                        response_data,
+                    ).map_err(|_| ServiceError::ProcessingFailed)?;
+                    
+                    Ok(Some(response_frame))
+                }
+                Ok(None) => Ok(None), // No response needed
+                Err(e) => Err(e),
             }
-            3 => {
-                // if let Some(hk) = housekeeping {
-                //     hk.process(service, subtype, payload.clone(), node_id);
-                // }
-            }
-            8 => {
-                // if let Some(fm) = function_management {
-                //     fm.process(service, subtype, payload.clone(), node_id);
-                // }
-            }
-            17 => {
-                // if let Some(t) = test {
-                //     t.process(service, subtype, payload.clone(), node_id);
-                // }
-            }
-            20 => {
-                // if let Some(pm) = parameter_management {
-                //     pm.process(service, subtype, payload.clone(), node_id);
-                // }
-            }
-            _ => {
-                // No std eprintln, so no error print
-            }
+        } else {
+            Err(ServiceError::ServiceNotRegistered)
         }
     }
-}
-
-/// Responder for PacketUtilizationService.
-struct PacketUtilizationServiceResponder {
-    parent: Arc<Mutex<PacketUtilizationService>>,
-}
-
-impl PacketUtilizationServiceResponder {
-    /// Creates a new responder.
-    fn new(parent: Arc<Mutex<PacketUtilizationService>>) -> Self {
-        Self { parent }
+    
+    /// Get list of registered service types
+    pub fn get_registered_services(&self) -> Vec<u8> {
+        self.services.keys().copied().collect()
+    }
+    
+    /// Get node ID
+    pub fn get_node_id(&self) -> u32 {
+        self.node_id
     }
 }
-
-/// Macro to implement PacketProcessor trait for responders.
-macro_rules! impl_packet_processor {
-    ($responder:ident) => {
-        impl PacketProcessor for $responder {
-            fn process(&self, _service: u8, _subtype: u8, _data: Vec<u8>, _node_id: u32) {
-                // No std println, so no output here
-            }
-        }
-    };
-}
-
-/// RequestVerificationServiceResponder implementation.
-struct RequestVerificationServiceResponder;
-impl RequestVerificationServiceResponder {
-    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
-        Self
-    }
-}
-impl_packet_processor!(RequestVerificationServiceResponder);
-
-/// HousekeepingServiceResponder implementation.
-struct HousekeepingServiceResponder;
-impl HousekeepingServiceResponder {
-    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
-        Self
-    }
-}
-impl_packet_processor!(HousekeepingServiceResponder);
-
-/// FunctionManagementServiceResponder implementation.
-struct FunctionManagementServiceResponder;
-impl FunctionManagementServiceResponder {
-    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
-        Self
-    }
-}
-impl_packet_processor!(FunctionManagementServiceResponder);
-
-/// TestServiceResponder implementation.
-struct TestServiceResponder;
-impl TestServiceResponder {
-    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
-        Self
-    }
-}
-impl_packet_processor!(TestServiceResponder);
-
-/// ParameterManagementServiceResponder implementation.
-struct ParameterManagementServiceResponder;
-impl ParameterManagementServiceResponder {
-    fn new(_parent: Arc<PacketUtilizationServiceResponder>) -> Self {
-        Self
-    }
-}
-impl_packet_processor!(ParameterManagementServiceResponder);

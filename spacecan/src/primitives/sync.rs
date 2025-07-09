@@ -1,163 +1,89 @@
-
-
 extern crate alloc;
 
-use alloc::sync::Arc;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
-#[cfg(not(feature = "std"))]
-use cortex_m::interrupt::Mutex;
-
-use core::time::Duration;
-#[cfg(feature = "std")]
-use std::thread;
-#[cfg(feature = "std")]
-use std::time::Instant;
-
+use alloc::vec::Vec;
+use core::fmt;
 use super::can_frame::{CanFrame, CanFrameError};
-use crate::primitives::network::Parent;
+use crate::constants::ID_SYNC;
 
-const ID_SYNC: u32 = 0x080;
-
-// Timer struct for periodic sync frame transmission
-struct Timer {
-    period: Duration,
-    callback: Arc<dyn Fn() + Send + Sync>,
-    running: Arc<Mutex<bool>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncError {
+    InvalidData,
+    SendFailed,
 }
 
-impl Timer {
-    fn new(period: Duration, callback: Arc<dyn Fn() + Send + Sync>) -> Self {
-        Timer {
-            period,
-            callback,
-            running: Arc::new(Mutex::new(false)),
+impl fmt::Display for SyncError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SyncError::InvalidData => write!(f, "Invalid sync data"),
+            SyncError::SendFailed => write!(f, "Failed to send sync"),
         }
     }
-
-    #[cfg(feature = "std")]
-    fn start(&self) {
-        let running = Arc::clone(&self.running);
-        let callback = Arc::clone(&self.callback);
-        let period = self.period;
-        *running.lock().unwrap() = true;
-
-        thread::spawn(move || {
-            while *running.lock().unwrap() {
-                thread::sleep(period);
-                callback();
-            }
-        });
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn start(&self) {
-        // No-op or alternative implementation for no_std
-    }
-
-    #[cfg(feature = "std")]
-    fn stop(&self) {
-        *self.running.lock().unwrap() = false;
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn stop(&self) {
-        // no_std alternative implementation if needed
-    }
 }
 
-// SyncProducer struct to send periodic synchronization frames
-pub struct SyncProducer {
-    parent: Arc<dyn Parent>,
-    running: bool,
-    timer: Option<Timer>,
-    period: Option<Duration>,
-    can_frame: CanFrame,
+#[derive(Debug)]
+pub struct SyncData {
+    pub sync_counter: u32,
+    pub timestamp: u32,
 }
 
-impl SyncProducer {
-    pub fn new(parent: Arc<dyn Parent>) -> Result<Self, CanFrameError> {
-        let can_frame = CanFrame::new(ID_SYNC, None)?;
-        Ok(SyncProducer {
-            parent,
-            running: false,
-            timer: None,
-            period: None,
-            can_frame,
+impl SyncData {
+    pub fn new(sync_counter: u32, timestamp: u32) -> Self {
+        SyncData {
+            sync_counter,
+            timestamp,
+        }
+    }
+    
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(8);
+        bytes.extend_from_slice(&self.sync_counter.to_be_bytes());
+        bytes.extend_from_slice(&self.timestamp.to_be_bytes());
+        bytes
+    }
+    
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SyncError> {
+        if bytes.len() < 8 {
+            return Err(SyncError::InvalidData);
+        }
+        
+        let sync_counter = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let timestamp = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        
+        Ok(SyncData {
+            sync_counter,
+            timestamp,
         })
     }
-
-    pub fn send(&self) -> Result<(), CanFrameError> {
-        self.parent.send(&self.can_frame)
-    }
-
-    pub fn start(&mut self, period: Duration) {
-        self.period = Some(period);
-        if self.running {
-            self.stop();
-        }
-        self.running = true;
-        let parent_clone = Arc::clone(&self.parent);
-        let frame_clone = self.can_frame.clone();
-
-        let timer = Timer::new(period, Arc::new(move || {
-            let _ = parent_clone.send(&frame_clone);
-        }));
-        self.timer = Some(timer);
-        self.timer.as_ref().unwrap().start();
-    }
-
-    pub fn stop(&mut self) {
-        self.running = false;
-        if let Some(timer) = self.timer.take() {
-            timer.stop();
-        }
-    }
 }
 
-// SyncConsumer struct to track received sync frames
-pub struct SyncConsumer {
-    #[cfg(feature = "std")]
-    last_received: Arc<Mutex<Option<Instant>>>,
-    #[cfg(not(feature = "std"))]
-    last_received: Arc<Mutex<Option<()>>>,
-    timeout: Duration,
+pub struct SyncManager {
+    sync_counter: u32,
 }
 
-impl SyncConsumer {
-    pub fn new(timeout: Duration) -> Self {
-        SyncConsumer {
-            #[cfg(feature = "std")]
-            last_received: Arc::new(Mutex::new(None)),
-            #[cfg(not(feature = "std"))]
-            last_received: Arc::new(Mutex::new(None)),
-            timeout,
+impl SyncManager {
+    pub fn new() -> Self {
+        SyncManager {
+            sync_counter: 0,
         }
     }
-
-    #[cfg(feature = "std")]
-    pub fn receive_sync(&self) {
-        let mut last_received = self.last_received.lock().unwrap();
-        *last_received = Some(Instant::now());
+    
+    pub fn create_sync(&mut self, timestamp: u32) -> Result<CanFrame, SyncError> {
+        self.sync_counter = self.sync_counter.wrapping_add(1);
+        let sync_data = SyncData::new(self.sync_counter, timestamp);
+        
+        CanFrame::new(ID_SYNC, Some(sync_data.to_bytes()))
+            .map_err(|_| SyncError::SendFailed)
     }
-
-    #[cfg(not(feature = "std"))]
-    pub fn receive_sync(&self) {
-        // No-op or alternative implementation for no_std
-    }
-
-    #[cfg(feature = "std")]
-    pub fn check_timeout(&self) -> bool {
-        let last_received = self.last_received.lock().unwrap();
-        if let Some(last) = *last_received {
-            return last.elapsed() > self.timeout;
+    
+    pub fn parse_sync(&self, frame: &CanFrame) -> Result<SyncData, SyncError> {
+        if frame.can_id() != ID_SYNC {
+            return Err(SyncError::InvalidData);
         }
-        true
+        
+        SyncData::from_bytes(frame.data())
     }
-
-    #[cfg(not(feature = "std"))]
-    pub fn check_timeout(&self) -> bool {
-        // Always timeout in no_std or implement alternative logic
-        true
+    
+    pub fn get_sync_counter(&self) -> u32 {
+        self.sync_counter
     }
 }

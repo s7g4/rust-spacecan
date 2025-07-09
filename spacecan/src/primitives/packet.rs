@@ -17,6 +17,10 @@ impl Packet {
         let data = data.unwrap_or_else(Vec::new);
         Packet { data }
     }
+    
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
 
     pub fn split(&self) -> Vec<Vec<u8>> {
         let total_frames = (self.data.len() + MAX_DATA_LENGTH - 1) / MAX_DATA_LENGTH;

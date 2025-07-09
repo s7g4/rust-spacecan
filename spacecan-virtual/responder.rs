@@ -4,6 +4,9 @@ use spacecan::services::ST08_function_management;
 use spacecan::services::ST01_request_verification;
 use spacecan::services::ST20_parameter_management;
 use spacecan::services::ST03_housekeeping;
+use spacecan::services::ST17_test;
+use spacecan::Packet;
+use socketcan::EmbeddedFrame;
 
 
 #[cfg(feature = "async")]
@@ -70,7 +73,6 @@ impl CanSocketStream {
 #[cfg(feature = "async")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    use spacecan::services::ST17_test;
 
     let socket = socketcan::Socket::open("vcan0")?;
     let mut stream = CanSocketStream::new(socket);
@@ -78,11 +80,11 @@ async fn main() -> anyhow::Result<()> {
     println!("Responder listening on vcan0...");
 
     // Instantiate services
-    let function_management = ST08_function_management::FunctionManagementService::new(&MyParent {});
-    let request_verification = ST01_request_verification::RequestVerificationServiceController::new(std::sync::Arc::new(MyParent {}));
-    let parameter_management = ST20_parameter_management::ParameterManagementServiceController::new(Box::new(MyParent {}));
-    let housekeeping = ST03_housekeeping::HousekeepingServiceController::new(std::sync::Arc::new(MyParent {}));
-    let test_service = ST17_test::TestServiceController::new(Box::new(MyParent {}));
+    let mut function_management = ST08_function_management::FunctionManagementService::new();
+    let mut request_verification = ST01_request_verification::RequestVerificationService::new();
+    let mut parameter_management = ST20_parameter_management::ParameterManagementService::new();
+    let mut housekeeping = ST03_housekeeping::HousekeepingService::new();
+    let mut test_service = ST17_test::TestService::new();
 
     while let Some(frame_result) = stream.next().await {
         match frame_result {
@@ -118,14 +120,22 @@ async fn main() -> anyhow::Result<()> {
                     }
                     _ => {
                         // Dispatch to services here, example:
-                        function_management.process(0, raw_id as u8, data.to_vec(), 0);
-                        request_verification.process(0, raw_id as u8, data.to_vec(), 0);
-                        parameter_management.process(0, raw_id as u8, data.to_vec(), 0);
-                        housekeeping.process(0, raw_id as u8, data.to_vec(), 0);
-                        test_service.process(0, raw_id as u8, data.to_vec(), 0);
+                        let _ = function_management.perform_function(raw_id as u16, data.to_vec());
+                        let _ = request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
+                        let _ = parameter_management.report_parameter_values(vec![raw_id as u16]);
+                        let _ = housekeeping.create_report(vec![raw_id as u16], 0);
+                        let _ = test_service.create_connection_test(raw_id as u32);
                         println!("Other CAN frame received: id=0x{:X} data={:?}", raw_id, data);
                     }
                 }
+
+                // Display menu correspondence: print a summary line for each service
+                println!("Service status:");
+                println!("Function Management: last processed ID 0x{:X}", raw_id);
+                println!("Request Verification: last processed ID 0x{:X}", raw_id);
+                println!("Parameter Management: last processed ID 0x{:X}", raw_id);
+                println!("Housekeeping: last processed ID 0x{:X}", raw_id);
+                println!("Test Service: last processed ID 0x{:X}", raw_id);
             }
             Err(e) => {
                 eprintln!("Error reading CAN frame: {}", e);
@@ -136,82 +146,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-struct MyParent;
-
-impl ST08_function_management::Parent for MyParent {
-    fn send(&self, _packet: ST08_function_management::Packet) {
-        // Implement send logic here
-    }
-}
-
-use spacecan::services::ST17_test::RequestVerification as ST17RequestVerification;
-
-trait RequestVerification {
-    fn send_success_acceptance_report(&self, args: &[u8]);
-    fn send_success_completion_report(&self, args: &[u8]);
-    fn send_fail_acceptance_report(&self, args: &[u8]);
-    fn send_fail_completion_report(&self, args: &[u8]);
-}
-
-trait ParentST01 {
-    fn send(&self, packet: Vec<u8>);
-    fn request_verification(&self) -> &dyn RequestVerification;
-}
-
-struct MyRequestVerification;
-
-impl RequestVerification for MyRequestVerification {
-    fn send_success_acceptance_report(&self, _args: &[u8]) {
-        // Implement actual logic or leave empty
-    }
-    fn send_success_completion_report(&self, _args: &[u8]) {
-        // Implement actual logic or leave empty
-    }
-    fn send_fail_acceptance_report(&self, _args: &[u8]) {
-        // Implement actual logic or leave empty
-    }
-    fn send_fail_completion_report(&self, _args: &[u8]) {
-        // Implement actual logic or leave empty
-    }
-}
-
-impl ParentST01 for MyParent {
-    fn send(&self, _packet: Vec<u8>) {
-        // Implement send logic here
-    }
-    fn request_verification(&self) -> &dyn RequestVerification {
-        &MyRequestVerification
-    }
-}
-
-trait ParentST20 {
-    fn send(&self, packet: Vec<u8>, node_id: u32);
-    fn request_verification(&self) -> &dyn RequestVerification;
-}
-
-impl ParentST20 for MyParent {
-    fn send(&self, _packet: Vec<u8>, _node_id: u32) {
-        // Implement send logic here
-    }
-    fn request_verification(&self) -> &dyn RequestVerification {
-        &MyRequestVerification
-    }
-}
-
-trait ParentST03 {
-    fn send(&self, packet: Vec<u8>);
-    fn get_parameter(&self, parameter_id: (u32, u32)) -> Vec<u8>;
-}
-
-impl ParentST03 for MyParent {
-    fn send(&self, _packet: Vec<u8>) {
-        // Implement send logic here
-    }
-    fn get_parameter(&self, _parameter_id: (u32, u32)) -> Vec<u8> {
-        // Implement get_parameter logic here or return dummy
-        vec![]
-    }
-}
+// Remove all the incorrect trait implementations as they don't exist in the actual services
 
 #[cfg(not(feature = "async"))]
 fn main() {

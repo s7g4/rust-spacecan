@@ -1,59 +1,43 @@
-let heartbeat_producer = Arc::new(HeartbeatProducer::new().expect("Failed to create HeartbeatProducer"));
-let heartbeat_consumer = Arc::new(HeartbeatConsumer::new(Duration::from_secs(3)));
-
-// Start Heartbeat Transmission in a separate thread
-let producer_clone = Arc::clone(&heartbeat_producer);
-thread::spawn(move || {
-    loop {
-        if let Err(e) = producer_clone.send() {
-            eprintln!("Error sending heartbeat signal: {}", e);
-        } else {
-            println!("❤️ Sent Heartbeat Signal");
-        }
-        thread::sleep(Duration::from_secs(2));
-    }
-});
-
-println!("📡 Listening for Heartbeat Signals...");
-loop {
-    if let Err(e) = heartbeat_consumer.receive_heartbeat() {
-        eprintln!("Error receiving heartbeat signal: {}", e);
-    }
-    if heartbeat_consumer.check_timeout() {
-        println!("⚠️ Heartbeat Timeout Detected!");
-    } else {
-        println!("✅ Heartbeat Signal Received");
-    }
-    thread::sleep(Duration::from_secs(2));
-}use spacecan::primitives::heartbeat::{HeartbeatProducer, HeartbeatConsumer};
-use std::sync::Arc;
-use std::time::Duration;
-use std::thread;
+use stm32g0xx_hal::{
+    pac,
+    prelude::*,
+    gpio::GpioExt,
+    rcc::RccExt,
+};
+use bxcan::{Can, Frame, Id, StandardId};
+use fugit::ExtU32;
 
 fn main() {
-    // Initialize Heartbeat Producer and Consumer
-    let heartbeat_producer = Arc::new(HeartbeatProducer::new().expect("Failed to create HeartbeatProducer"));
-    let heartbeat_consumer = Arc::new(HeartbeatConsumer::new(Duration::from_secs(3)));
+    let dp = pac::Peripherals::take().unwrap();
 
-    // Start Heartbeat Transmission in a separate thread
-    let producer_clone = Arc::clone(&heartbeat_producer);
-    thread::spawn(move || {
-        loop {
-            if producer_clone.send().is_ok() {
-                println!("❤️ Sent Heartbeat Signal");
-            }
-            thread::sleep(Duration::from_secs(2));
-        }
-    });
+    let mut rcc = dp.RCC.constrain();
+    let mut gpio = dp.GPIOB.split(&mut rcc);
 
-    println!("📡 Listening for Heartbeat Signals...");
-    loop {
-        heartbeat_consumer.receive_heartbeat();
-        if heartbeat_consumer.check_timeout() {
-            println!("⚠️ Heartbeat Timeout Detected!");
-        } else {
-            println!("✅ Heartbeat Signal Received");
-        }
-        thread::sleep(Duration::from_secs(2));
-    }
+    let clocks = rcc.cfgr.sysclk(64.mhz()).freeze();
+
+    let can_rx = gpio.pb8.into_alternate::<6>();
+    let can_tx = gpio.pb9.into_alternate::<6>();
+
+    dp.RCC.apbenr1.modify(|_, w| w.canen().set_bit());
+
+    let can_peripheral = dp.CAN;
+    let mut can = bxcan::Can::builder(can_peripheral)
+        .set_bit_timing(0x001c_0000)
+        .leave_disabled();
+
+    can.modify_filters().enable_bank(
+        0,
+        bxcan::Fifo::Fifo0,
+        bxcan::filter::BankConfig::Mask32(bxcan::filter::Mask32::accept_all()),
+    );
+
+    can.enable_interrupts();
+    can.enable();
+
+    let frame = Frame::new_data(
+        Id::Standard(StandardId::new(0x700).unwrap()),
+        &[0x01, 0x02, 0x03, 0x04],
+    );
+
+    can.transmit(&frame).unwrap();
 }

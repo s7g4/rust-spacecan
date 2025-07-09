@@ -1,149 +1,104 @@
-
 extern crate alloc;
 
-use alloc::sync::Arc;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
-#[cfg(not(feature = "std"))]
-use cortex_m::interrupt::Mutex;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use core::fmt;
+use super::can_frame::{CanFrame, CanFrameError};
 
-use super::can_frame::{CanFrame, CanFrameError}; // Import improved CanFrame
-use core::ptr;
-
-// Define a trait for Bus
-pub trait Bus {
-    fn flush_frame_buffer(&self);
-    fn start_receive(&self);
-    fn stop_receive(&self);
-    fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError>;
-    fn get_frame(&self) -> Option<CanFrame>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkError {
+    NodeNotFound,
+    InvalidNodeId,
+    SendFailed,
 }
 
-// Network struct with thread-safe bus switching
-
-pub struct Network<T: Bus> {
-    parent: Arc<dyn Parent>, // Assuming Parent is a trait that has the method received_frame
-    node_id: u32,
-    bus_a: T,
-    bus_b: T,
-    #[cfg(feature = "std")]
-    selected_bus: Mutex<T>, // Ensures safe concurrent access
-    #[cfg(not(feature = "std"))]
-    selected_bus: cortex_m::interrupt::Mutex<core::cell::RefCell<T>>,
+impl fmt::Display for NetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NetworkError::NodeNotFound => write!(f, "Node not found"),
+            NetworkError::InvalidNodeId => write!(f, "Invalid node ID"),
+            NetworkError::SendFailed => write!(f, "Failed to send to node"),
+        }
+    }
 }
 
-impl<T: Bus + Clone> Network<T> {
-    pub fn new(parent: Arc<dyn Parent>, node_id: u32, bus_a: T, bus_b: T) -> Self {
-        Network {
-            parent,
+#[derive(Debug, Clone)]
+pub struct NodeInfo {
+    pub node_id: u32,
+    pub status: u8,
+    pub last_seen: u32, // timestamp
+}
+
+impl NodeInfo {
+    pub fn new(node_id: u32) -> Self {
+        NodeInfo {
             node_id,
-            bus_a: bus_a.clone(),
-            bus_b: bus_b.clone(),
-            #[cfg(feature = "std")]
-            selected_bus: Mutex::new(bus_a.clone()), // Start with bus_a clone
-            #[cfg(not(feature = "std"))]
-            selected_bus: cortex_m::interrupt::Mutex::new(core::cell::RefCell::new(bus_a.clone())),
+            status: 0,
+            last_seen: 0,
         }
     }
-
-    pub fn start(&self) {
-        #[cfg(feature = "std")]
-        {
-            let mut bus = self.selected_bus.lock().unwrap();
-            bus.flush_frame_buffer();
-            bus.start_receive();
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            cortex_m::interrupt::free(|cs| {
-                let bus = self.selected_bus.borrow(cs).borrow_mut();
-                bus.flush_frame_buffer();
-                bus.start_receive();
-            });
-        }
-    }
-
-    pub fn stop(&self) {
-        #[cfg(feature = "std")]
-        {
-            let mut bus = self.selected_bus.lock().unwrap();
-            bus.flush_frame_buffer();
-            bus.stop_receive();
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            cortex_m::interrupt::free(|cs| {
-                let bus = self.selected_bus.borrow(cs).borrow_mut();
-                bus.flush_frame_buffer();
-                bus.stop_receive();
-            });
-        }
-    }
-
-    // Process frames from the bus
-    pub fn process(&self) {
-        #[cfg(feature = "std")]
-        {
-            let mut bus = self.selected_bus.lock().unwrap();
-            if let Some(can_frame) = bus.get_frame() {
-                self.parent.received_frame(can_frame);
-            }
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            cortex_m::interrupt::free(|cs| {
-                let bus = self.selected_bus.borrow(cs).borrow_mut();
-                if let Some(can_frame) = bus.get_frame() {
-                    self.parent.received_frame(can_frame);
-                }
-            });
-        }
-    }
-
-    pub fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError> {
-        #[cfg(feature = "std")]
-        {
-            let mut bus = self.selected_bus.lock().unwrap();
-            bus.send(can_frame)
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            let mut result = Err(CanFrameError::SendFailed);
-            cortex_m::interrupt::free(|cs| {
-                let bus = self.selected_bus.borrow(cs).borrow_mut();
-                result = bus.send(can_frame);
-            });
-            result
-        }
-    }
-
-    // Thread-safe bus switching
-    pub fn switch_bus(&self) {
-        #[cfg(feature = "std")]
-        {
-            let mut selected = self.selected_bus.lock().unwrap();
-            if ptr::eq(&*selected, &self.bus_a) {
-                *selected = self.bus_b.clone();
-            } else {
-                *selected = self.bus_a.clone();
-            }
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            cortex_m::interrupt::free(|cs| {
-                let mut selected = self.selected_bus.borrow(cs).borrow_mut();
-                if ptr::eq(&*selected, &self.bus_a) {
-                    *selected = self.bus_b.clone();
-                } else {
-                    *selected = self.bus_a.clone();
-                }
-            });
-        }
+    
+    pub fn update_status(&mut self, status: u8, timestamp: u32) {
+        self.status = status;
+        self.last_seen = timestamp;
     }
 }
 
-// Assuming a Parent trait is defined somewhere
-pub trait Parent: Send + Sync {
-    fn received_frame(&self, can_frame: CanFrame);
-    fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError>;
+pub struct NetworkManager {
+    nodes: BTreeMap<u32, NodeInfo>,
+    local_node_id: u32,
+}
+
+impl NetworkManager {
+    pub fn new(local_node_id: u32) -> Self {
+        NetworkManager {
+            nodes: BTreeMap::new(),
+            local_node_id,
+        }
+    }
+    
+    pub fn add_node(&mut self, node_id: u32) -> Result<(), NetworkError> {
+        if node_id > crate::constants::NODE_ID_MASK {
+            return Err(NetworkError::InvalidNodeId);
+        }
+        
+        self.nodes.insert(node_id, NodeInfo::new(node_id));
+        Ok(())
+    }
+    
+    pub fn remove_node(&mut self, node_id: u32) -> Result<(), NetworkError> {
+        self.nodes.remove(&node_id)
+            .map(|_| ())
+            .ok_or(NetworkError::NodeNotFound)
+    }
+    
+    pub fn update_node_status(&mut self, node_id: u32, status: u8, timestamp: u32) -> Result<(), NetworkError> {
+        self.nodes.get_mut(&node_id)
+            .map(|node| node.update_status(status, timestamp))
+            .ok_or(NetworkError::NodeNotFound)
+    }
+    
+    pub fn get_node(&self, node_id: u32) -> Option<&NodeInfo> {
+        self.nodes.get(&node_id)
+    }
+    
+    pub fn get_all_nodes(&self) -> Vec<&NodeInfo> {
+        self.nodes.values().collect()
+    }
+    
+    pub fn is_node_active(&self, node_id: u32, current_time: u32, timeout: u32) -> bool {
+        if let Some(node) = self.nodes.get(&node_id) {
+            current_time.saturating_sub(node.last_seen) <= timeout
+        } else {
+            false
+        }
+    }
+    
+    pub fn get_local_node_id(&self) -> u32 {
+        self.local_node_id
+    }
+    
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
 }
