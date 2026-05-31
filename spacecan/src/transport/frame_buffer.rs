@@ -1,40 +1,36 @@
 extern crate alloc;
 
+#[cfg(not(feature = "embedded"))]
+extern crate std;
+
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
 use alloc::collections::VecDeque;
+#[cfg(feature = "embedded")]
 use core::cell::RefCell;
-
 #[cfg(feature = "embedded")]
 use cortex_m::interrupt::{Mutex, free as interrupt_free};
-
-#[cfg(not(feature = "embedded"))]
-fn interrupt_free<F, R>(f: F) -> R
-where
-    F: FnOnce() -> R,
-{
-    f()
-}
 
 #[cfg(feature = "embedded")]
 type MutexType<T> = cortex_m::interrupt::Mutex<RefCell<T>>;
 
 #[cfg(not(feature = "embedded"))]
-type MutexType<T> = RefCell<T>;
+type MutexType<T> = std::sync::Mutex<T>;
 
-/// Frame buffer for storing CAN frames with fixed size.
+/// Fixed-capacity ring buffer for CAN frames.
 pub struct FrameBuffer {
     buffer: MutexType<VecDeque<CanFrame>>,
     capacity: usize,
 }
 
 impl FrameBuffer {
-    /// Creates a new frame buffer with the given capacity.
     pub fn new(capacity: usize) -> Self {
         FrameBuffer {
             #[cfg(feature = "embedded")]
-            buffer: cortex_m::interrupt::Mutex::new(RefCell::new(VecDeque::with_capacity(capacity))),
+            buffer: cortex_m::interrupt::Mutex::new(RefCell::new(VecDeque::with_capacity(
+                capacity,
+            ))),
             #[cfg(not(feature = "embedded"))]
-            buffer: RefCell::new(VecDeque::with_capacity(capacity)),
+            buffer: std::sync::Mutex::new(VecDeque::with_capacity(capacity)),
             capacity,
         }
     }
@@ -54,18 +50,19 @@ impl FrameBuffer {
         }
         #[cfg(not(feature = "embedded"))]
         {
-            interrupt_free(|| {
-                let mut buffer = self.buffer.borrow_mut();
-                if buffer.len() >= self.capacity {
+            if let Ok(mut guard) = self.buffer.lock() {
+                if guard.len() >= self.capacity {
                     return Err(CanFrameError::SendFailed);
                 }
-                buffer.push_back(frame);
+                guard.push_back(frame);
                 Ok(())
-            })
+            } else {
+                Err(CanFrameError::SendFailed)
+            }
         }
     }
 
-    /// Removes and returns a frame from the buffer. Returns None if buffer is empty.
+    /// Dequeues a frame. Returns None if empty.
     pub fn pop(&self) -> Option<CanFrame> {
         #[cfg(feature = "embedded")]
         {
@@ -76,14 +73,14 @@ impl FrameBuffer {
         }
         #[cfg(not(feature = "embedded"))]
         {
-            interrupt_free(|| {
-                let mut buffer = self.buffer.borrow_mut();
-                buffer.pop_front()
-            })
+            if let Ok(mut guard) = self.buffer.lock() {
+                guard.pop_front()
+            } else {
+                None
+            }
         }
     }
 
-    /// Returns the number of frames currently in the buffer.
     pub fn len(&self) -> usize {
         #[cfg(feature = "embedded")]
         {
@@ -94,24 +91,22 @@ impl FrameBuffer {
         }
         #[cfg(not(feature = "embedded"))]
         {
-            interrupt_free(|| {
-                let buffer = self.buffer.borrow();
-                buffer.len()
-            })
+            if let Ok(guard) = self.buffer.lock() {
+                guard.len()
+            } else {
+                0
+            }
         }
     }
 
-    /// Returns true if the buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns true if the buffer is full.
     pub fn is_full(&self) -> bool {
         self.len() >= self.capacity
     }
 
-    /// Clears all frames from the buffer.
     pub fn clear(&self) {
         #[cfg(feature = "embedded")]
         {
@@ -122,14 +117,12 @@ impl FrameBuffer {
         }
         #[cfg(not(feature = "embedded"))]
         {
-            interrupt_free(|| {
-                let mut buffer = self.buffer.borrow_mut();
-                buffer.clear();
-            })
+            if let Ok(mut guard) = self.buffer.lock() {
+                guard.clear();
+            }
         }
     }
 
-    /// Returns the capacity of the buffer.
     pub fn capacity(&self) -> usize {
         self.capacity
     }
