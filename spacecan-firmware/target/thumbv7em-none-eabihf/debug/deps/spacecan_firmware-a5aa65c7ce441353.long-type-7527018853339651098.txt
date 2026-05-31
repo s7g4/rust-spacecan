@@ -1,1 +1,0 @@
-SpaceCAN<bxcan::Can<stm32f7xx_hal::can::Can<CAN1>>>

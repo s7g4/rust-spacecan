@@ -1,7 +1,0 @@
-cargo:rustc-link-search=/home/shaurya/Desktop/rust-spacecan/spacecan-firmware/target/thumbv7em-none-eabihf/debug/build/stm32f7xx-hal-db60d0a5cbd84d7f/out
-cargo:rerun-if-changed=memory_1024_320.x
-cargo:rerun-if-changed=memory_2048_368.x
-cargo:rerun-if-changed=memory_512_176.x
-cargo:rerun-if-changed=memory_64_176.x
-cargo:rerun-if-changed=memory_64_240.x
-cargo:rerun-if-changed=build.rs

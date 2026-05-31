@@ -1,5 +1,5 @@
 # Rust build files
-/target
+target/
 /Cargo.lock
 
 # Rust editor files

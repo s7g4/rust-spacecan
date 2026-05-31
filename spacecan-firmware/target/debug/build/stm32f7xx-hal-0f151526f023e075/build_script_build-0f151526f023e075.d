@@ -1,9 +1,0 @@
-/home/shaurya/Desktop/rust-spacecan/spacecan-firmware/target/debug/build/stm32f7xx-hal-0f151526f023e075/build_script_build-0f151526f023e075: /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/build.rs /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_512_176.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_1024_320.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_2048_368.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_64_176.x
-
-/home/shaurya/Desktop/rust-spacecan/spacecan-firmware/target/debug/build/stm32f7xx-hal-0f151526f023e075/build_script_build-0f151526f023e075.d: /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/build.rs /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_512_176.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_1024_320.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_2048_368.x /home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_64_176.x
-
-/home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/build.rs:
-/home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_512_176.x:
-/home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_1024_320.x:
-/home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_2048_368.x:
-/home/shaurya/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stm32f7xx-hal-0.8.0/memory_64_176.x:
