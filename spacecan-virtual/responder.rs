@@ -1,35 +1,35 @@
 #![cfg_attr(not(feature = "async"), allow(dead_code, unused_imports))]
 
-use spacecan::services::ST08_function_management;
-use spacecan::services::ST01_request_verification;
-use spacecan::services::ST20_parameter_management;
-use spacecan::services::ST03_housekeeping;
-use spacecan::services::ST17_test;
-use spacecan::Packet;
+#[cfg(target_os = "linux")]
 use socketcan::EmbeddedFrame;
+use spacecan::Packet;
+use spacecan::services::ST01_request_verification;
+use spacecan::services::ST03_housekeeping;
+use spacecan::services::ST08_function_management;
+use spacecan::services::ST17_test;
+use spacecan::services::ST20_parameter_management;
 
-
-#[cfg(feature = "async")]
-use tokio_stream::StreamExt;
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 use futures_core::stream::Stream;
-#[cfg(feature = "async")]
-use std::pin::Pin;
-#[cfg(feature = "async")]
-use std::task::{Context, Poll};
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 use std::convert::TryInto;
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
+use std::pin::Pin;
+#[cfg(all(feature = "async", target_os = "linux"))]
 use std::sync::mpsc::{self, Receiver};
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
+use std::task::{Context, Poll};
+#[cfg(all(feature = "async", target_os = "linux"))]
 use std::thread;
+#[cfg(all(feature = "async", target_os = "linux"))]
+use tokio_stream::StreamExt;
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 struct CanSocketStream {
     receiver: Receiver<Result<socketcan::CanFrame, std::io::Error>>,
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 impl Stream for CanSocketStream {
     type Item = Result<socketcan::CanFrame, std::io::Error>;
 
@@ -45,7 +45,7 @@ impl Stream for CanSocketStream {
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 impl CanSocketStream {
     fn new(socket: socketcan::CanSocket) -> Self {
         let (tx, rx) = mpsc::channel();
@@ -70,10 +70,9 @@ impl CanSocketStream {
     }
 }
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
     let socket = socketcan::Socket::open("vcan0")?;
     let mut stream = CanSocketStream::new(socket);
 
@@ -121,11 +120,15 @@ async fn main() -> anyhow::Result<()> {
                     _ => {
                         // Dispatch to services here, example:
                         let _ = function_management.perform_function(raw_id as u16, data.to_vec());
-                        let _ = request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
+                        let _ =
+                            request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
                         let _ = parameter_management.report_parameter_values(vec![raw_id as u16]);
                         let _ = housekeeping.create_report(vec![raw_id as u16], 0);
                         let _ = test_service.create_connection_test(raw_id as u32);
-                        println!("Other CAN frame received: id=0x{:X} data={:?}", raw_id, data);
+                        println!(
+                            "Other CAN frame received: id=0x{:X} data={:?}",
+                            raw_id, data
+                        );
                     }
                 }
 
@@ -148,7 +151,11 @@ async fn main() -> anyhow::Result<()> {
 
 // Remove all the incorrect trait implementations as they don't exist in the actual services
 
-#[cfg(not(feature = "async"))]
+#[cfg(not(all(feature = "async", target_os = "linux")))]
 fn main() {
+    #[cfg(not(feature = "async"))]
     println!("Async feature disabled. This binary does nothing.");
+
+    #[cfg(all(feature = "async", not(target_os = "linux")))]
+    println!("SocketCAN is not supported on this platform. UDP simulation will be added in Phase 5.");
 }

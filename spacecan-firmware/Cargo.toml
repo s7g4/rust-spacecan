@@ -3,20 +3,16 @@ name = "spacecan-firmware"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+test = false
+
 [[bin]]
 name = "firmware"
 path = "src/main.rs"
+test = false
 
 [profile.release]
 strip = "debuginfo"
-
-[[example]]
-name = "firmware"
-path = "examples/firmware.rs"
-
-strip = "debuginfo"
-build-std = ["core", "compiler_builtins"]
-build-std-features = ["compiler-builtins-mem"]
 
 [dependencies]
 cortex-m = "0.7"
@@ -25,7 +21,7 @@ panic-halt = "0.2"
 embedded-hal = "0.2"
 nb = "1.0"
 stm32g0xx-hal = { version = "0.2", features = ["stm32g071", "i2c-blocking"], default-features = false }
-spacecan = { path = "../spacecan" }
+spacecan = { path = "../spacecan", features = ["defmt"] }
 bxcan = "0.7"
 fugit = "0.3"
 defmt = "0.3"

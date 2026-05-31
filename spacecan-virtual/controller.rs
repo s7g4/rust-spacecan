@@ -1,21 +1,19 @@
 #![cfg_attr(not(feature = "async"), allow(dead_code, unused_imports))]
 
-use std::io::{self, Write};
-use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
-use socketcan::{CanFrame, CanSocket, Socket, StandardId, EmbeddedFrame};
 use anyhow::{Result, anyhow};
+#[cfg(target_os = "linux")]
+use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Socket, StandardId};
+use std::io::{self, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
+use tokio::time::{Duration, sleep};
 
 use spacecan::services::{
-    ST01_request_verification,
-    ST03_housekeeping,
-    ST08_function_management,
-    ST17_test,
+    ST01_request_verification, ST03_housekeeping, ST08_function_management, ST17_test,
     ST20_parameter_management,
 };
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", target_os = "linux"))]
 #[tokio::main]
 async fn main() -> Result<()> {
     // Open CAN socket on vcan0
@@ -41,9 +39,13 @@ async fn main() -> Result<()> {
             let heartbeat_data = heartbeat_counter.to_be_bytes(); // 4 bytes
             let heartbeat_frame = CanFrame::new(heartbeat_id, &heartbeat_data).unwrap();
             if let Err(e) = sender_socket.write_frame(&heartbeat_frame) {
-                let _ = sent_tx_clone.send(format!("Error sending heartbeat: {}", e)).await;
+                let _ = sent_tx_clone
+                    .send(format!("Error sending heartbeat: {}", e))
+                    .await;
             } else {
-                let _ = sent_tx_clone.send(format!("Sent Heartbeat: counter={}", heartbeat_counter)).await;
+                let _ = sent_tx_clone
+                    .send(format!("Sent Heartbeat: counter={}", heartbeat_counter))
+                    .await;
             }
             heartbeat_counter = heartbeat_counter.wrapping_add(1);
 
@@ -53,7 +55,9 @@ async fn main() -> Result<()> {
                 let sync_id = StandardId::new(0x080).unwrap();
                 let sync_frame = CanFrame::new(sync_id, &[]).unwrap();
                 if let Err(e) = sender_socket.write_frame(&sync_frame) {
-                    let _ = sent_tx_clone.send(format!("Error sending SYNC frame: {}", e)).await;
+                    let _ = sent_tx_clone
+                        .send(format!("Error sending SYNC frame: {}", e))
+                        .await;
                 } else {
                     let _ = sent_tx_clone.send("Sent SYNC frame".to_string()).await;
                 }
@@ -67,7 +71,9 @@ async fn main() -> Result<()> {
                 let scet_id = StandardId::new(0x100).unwrap();
                 let scet_frame = CanFrame::new(scet_id, &scet_bytes[0..8]).unwrap();
                 if let Err(e) = sender_socket.write_frame(&scet_frame) {
-                    let _ = sent_tx_clone.send(format!("Error sending SCET frame: {}", e)).await;
+                    let _ = sent_tx_clone
+                        .send(format!("Error sending SCET frame: {}", e))
+                        .await;
                 } else {
                     let _ = sent_tx_clone.send(format!("Sent SCET: {}", scet)).await;
                 }
@@ -81,7 +87,9 @@ async fn main() -> Result<()> {
                 let utc_id = StandardId::new(0x101).unwrap();
                 let utc_frame = CanFrame::new(utc_id, &utc_bytes[0..8]).unwrap();
                 if let Err(e) = sender_socket.write_frame(&utc_frame) {
-                    let _ = sent_tx_clone.send(format!("Error sending UTC frame: {}", e)).await;
+                    let _ = sent_tx_clone
+                        .send(format!("Error sending UTC frame: {}", e))
+                        .await;
                 } else {
                     let _ = sent_tx_clone.send(format!("Sent UTC: {}", utc)).await;
                 }
@@ -92,37 +100,54 @@ async fn main() -> Result<()> {
             // Check for commands from menu (non-blocking)
             if let Ok(cmd) = cmd_rx.try_recv() {
                 // Handle service functionality commands here
-                let _ = sent_tx_clone.send(format!("Received command: {}", cmd)).await;
+                let _ = sent_tx_clone
+                    .send(format!("Received command: {}", cmd))
+                    .await;
 
                 // Example: parse command and call ST service functions
                 match cmd.as_str() {
                     "st01" => {
-                        let mut service = ST01_request_verification::RequestVerificationService::new();
+                        let mut service =
+                            ST01_request_verification::RequestVerificationService::new();
                         service.accept_telecommand(1, 0);
-                        let _ = sent_tx_clone.send("ST01 service command executed".to_string()).await;
+                        let _ = sent_tx_clone
+                            .send("ST01 service command executed".to_string())
+                            .await;
                     }
                     "st08" => {
-                        let mut service = ST08_function_management::FunctionManagementService::new();
+                        let mut service =
+                            ST08_function_management::FunctionManagementService::new();
                         service.perform_function(1, vec![]);
-                        let _ = sent_tx_clone.send("ST08 service command executed".to_string()).await;
+                        let _ = sent_tx_clone
+                            .send("ST08 service command executed".to_string())
+                            .await;
                     }
                     "st03" => {
                         let mut service = ST03_housekeeping::HousekeepingService::new();
                         service.create_report(vec![1], 0u32);
-                        let _ = sent_tx_clone.send("ST03 service command executed".to_string()).await;
+                        let _ = sent_tx_clone
+                            .send("ST03 service command executed".to_string())
+                            .await;
                     }
                     "st17" => {
                         let mut service = ST17_test::TestService::new();
                         service.create_connection_test(1);
-                        let _ = sent_tx_clone.send("ST17 service command executed".to_string()).await;
+                        let _ = sent_tx_clone
+                            .send("ST17 service command executed".to_string())
+                            .await;
                     }
                     "st20" => {
-                        let mut service = ST20_parameter_management::ParameterManagementService::new();
+                        let mut service =
+                            ST20_parameter_management::ParameterManagementService::new();
                         service.report_parameter_values(vec![1]);
-                        let _ = sent_tx_clone.send("ST20 service command executed".to_string()).await;
+                        let _ = sent_tx_clone
+                            .send("ST20 service command executed".to_string())
+                            .await;
                     }
                     _ => {
-                        let _ = sent_tx_clone.send(format!("Unknown command: {}", cmd)).await;
+                        let _ = sent_tx_clone
+                            .send(format!("Unknown command: {}", cmd))
+                            .await;
                     }
                 }
             }
@@ -136,20 +161,22 @@ async fn main() -> Result<()> {
     let recv_tx_clone = recv_tx.clone();
     tokio::spawn(async move {
         loop {
-                    match recv_socket.read_frame() {
-                        Ok(frame) => {
-                            let id = match frame.id() {
-                                socketcan::Id::Standard(sid) => sid.as_raw() as u32,
-                                socketcan::Id::Extended(eid) => eid.as_raw(),
-                            };
-                            let data = frame.data();
-                            let msg = format!("Received frame: ID=0x{:X}, Data={:?}", id, data);
-                            let _ = recv_tx_clone.send(msg).await;
-                        }
-                        Err(e) => {
-                            let _ = recv_tx_clone.send(format!("Error receiving frame: {}", e)).await;
-                        }
-                    }
+            match recv_socket.read_frame() {
+                Ok(frame) => {
+                    let id = match frame.id() {
+                        socketcan::Id::Standard(sid) => sid.as_raw() as u32,
+                        socketcan::Id::Extended(eid) => eid.as_raw(),
+                    };
+                    let data = frame.data();
+                    let msg = format!("Received frame: ID=0x{:X}, Data={:?}", id, data);
+                    let _ = recv_tx_clone.send(msg).await;
+                }
+                Err(e) => {
+                    let _ = recv_tx_clone
+                        .send(format!("Error receiving frame: {}", e))
+                        .await;
+                }
+            }
             sleep(Duration::from_millis(100)).await;
         }
     });
@@ -207,13 +234,15 @@ async fn main() -> Result<()> {
                     "1" => {
                         println!("Invoking ST01 Request Verification Service...");
                         // Call a representative function from ST01_request_verification
-                        let mut service = ST01_request_verification::RequestVerificationService::new();
+                        let mut service =
+                            ST01_request_verification::RequestVerificationService::new();
                         // Example call to accept_telecommand
                         service.accept_telecommand(1, 0);
                     }
                     "2" => {
                         println!("Invoking ST08 Function Management Service...");
-                        let mut service = ST08_function_management::FunctionManagementService::new();
+                        let mut service =
+                            ST08_function_management::FunctionManagementService::new();
                         // Example call to perform_function
                         service.perform_function(1, vec![]);
                     }
@@ -230,7 +259,8 @@ async fn main() -> Result<()> {
                     }
                     "5" => {
                         println!("Invoking ST20 Parameter Management Service...");
-                        let mut service = ST20_parameter_management::ParameterManagementService::new();
+                        let mut service =
+                            ST20_parameter_management::ParameterManagementService::new();
                         service.report_parameter_values(vec![1]);
                     }
                     "b" => {
@@ -265,7 +295,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "async"))]
+#[cfg(not(all(feature = "async", target_os = "linux")))]
 fn main() {
+    #[cfg(not(feature = "async"))]
     println!("Async feature disabled. This binary does nothing.");
+
+    #[cfg(all(feature = "async", not(target_os = "linux")))]
+    println!(
+        "SocketCAN is not supported on this platform. UDP simulation will be added in Phase 5."
+    );
 }

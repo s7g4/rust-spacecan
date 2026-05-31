@@ -2,11 +2,6 @@
 
 extern crate alloc;
 
-use linked_list_allocator::LockedHeap;
-
-#[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
-
 // Core modules
 pub mod primitives;
 pub mod protocol;
@@ -20,6 +15,10 @@ pub mod services;
 mod tests {
     pub mod integration_test;
 }
+
+#[cfg(all(feature = "defmt", not(target_os = "none")))]
+#[path = "tests/defmt_mock.rs"]
+mod defmt_mock;
 
 // Re-export key types
 pub use primitives::{
@@ -39,18 +38,7 @@ pub use transport::{
     mock::MockTransport,
 };
 
-// Initialize allocator for no_std environments
-pub fn init_allocator() {
-    use core::mem::MaybeUninit;
-    
-    const HEAP_SIZE: usize = 8192;
-    static mut HEAP: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-    
-    unsafe { 
-        let heap_ptr = core::ptr::addr_of_mut!(HEAP) as *mut u8;
-        ALLOCATOR.lock().init(heap_ptr, HEAP_SIZE);
-    }
-}
+
 
 // Constants for SpaceCAN protocol
 pub mod constants {

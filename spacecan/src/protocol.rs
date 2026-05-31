@@ -28,6 +28,7 @@ impl fmt::Display for SpaceCANError {
 }
 
 /// Represents a SpaceCAN frame with protocol-specific fields
+#[cfg(all(feature = "defmt", not(test)))]
 use defmt::{Format, Formatter};
 
 #[derive(Debug, Clone)]
@@ -39,6 +40,7 @@ pub struct SpaceCANFrame {
     pub data: Vec<u8>,
 }
 
+#[cfg(all(feature = "defmt", not(test)))]
 impl Format for SpaceCANFrame {
     fn format(&self, fmt: Formatter) {
         defmt::write!(fmt, "SpaceCANFrame {{ can_id: {}, service_type: {}, subservice_type: {}, node_id: {}, data: [", 
