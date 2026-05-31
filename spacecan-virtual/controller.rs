@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "async"), allow(dead_code, unused_imports))]
+#![allow(dead_code, unused_imports, unused_variables)]
 
 use anyhow::{Result, anyhow};
 #[cfg(target_os = "linux")]
@@ -301,7 +301,5 @@ fn main() {
     println!("Async feature disabled. This binary does nothing.");
 
     #[cfg(all(feature = "async", not(target_os = "linux")))]
-    println!(
-        "SocketCAN is not supported on this platform. UDP simulation will be added in Phase 5."
-    );
+    println!("error: socketcan requires linux");
 }

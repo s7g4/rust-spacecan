@@ -1,9 +1,9 @@
 extern crate alloc;
 
+use super::can_frame::{CanFrame, CanFrameError};
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
-use super::can_frame::{CanFrame, CanFrameError};
 
 const MAX_DATA_LENGTH: usize = 6;
 
@@ -17,15 +17,15 @@ impl Packet {
         let data = data.unwrap_or_else(Vec::new);
         Packet { data }
     }
-    
-    pub fn data(&self) -> &Vec<u8> {
+
+    pub fn data(&self) -> &[u8] {
         &self.data
     }
 
     pub fn split(&self) -> Vec<Vec<u8>> {
         let total_frames = (self.data.len() + MAX_DATA_LENGTH - 1) / MAX_DATA_LENGTH;
         let mut frames = Vec::with_capacity(total_frames);
-        
+
         for (i, chunk) in self.data.chunks(MAX_DATA_LENGTH).enumerate() {
             let mut frame = Vec::with_capacity(2 + chunk.len());
             frame.push((total_frames - 1) as u8); // Total frames
@@ -52,9 +52,12 @@ impl PacketAssembler {
         let can_id = can_frame.can_id();
         let total_frames = can_frame.data().get(0).copied()? + 1;
         let frame_index = can_frame.data().get(1).copied()?;
-        
-        self.buffer.entry(can_id).or_default().insert(frame_index, can_frame.data()[2..].to_vec());
-        
+
+        self.buffer
+            .entry(can_id)
+            .or_default()
+            .insert(frame_index, can_frame.data()[2..].to_vec());
+
         if self.buffer[&can_id].len() == total_frames as usize {
             let mut data = Vec::new();
             let framebuffer = self.buffer.remove(&can_id).unwrap();

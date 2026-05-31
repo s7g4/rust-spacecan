@@ -62,3 +62,36 @@ Execute **Phase 1: Workspace Sanitization & OS Portability** to ensure the entir
 
 ### Next Steps
 Proceed to **Phase 2: Allocator & Thread-Safety (UB) Refactoring** to replace target-unsafe internal mutability wrappers with thread-safe types, and restructure multi-threading layers.
+
+---
+
+## Day 2: 2026-05-31
+
+### Goal
+Execute **Phase 2: Memory Integrity & Concurrency Safety** to replace the unsafe `UnsafeCell` loopback and target-unsafe `RefCell` structures in `spacecan/src/transport/` with target-specific safe `Mutex` primitives.
+
+### Work Completed
+1. Refactored `BusImpl` in `spacecan/src/transport/base.rs` to replace `UnsafeCell` with `std::sync::Mutex` on host and `cortex_m::interrupt::Mutex` + `RefCell` on embedded.
+2. Refactored `FrameBuffer` in `spacecan/src/transport/frame_buffer.rs` to replace the pseudo host lock `RefCell` with `std::sync::Mutex` on host targets.
+3. Refactored `MockTransport` in `spacecan/src/transport/mock.rs` to use `std::sync::Mutex` on host.
+4. Added `#[cfg(not(feature = "embedded"))] extern crate std;` to the core transport files to link std in `#![no_std]` crates on host systems.
+5. Untracked target compilation directories and `.Rhistory` junk files from Git, updating `.gitignore` to ignore them recursively.
+6. Validated compilation and test execution on Windows host.
+
+### Problems Encountered & Root Cause Analysis
+
+#### Problem A: Missing Crate std in `#![no_std]` Core Crates on Host
+- **Symptom**: Compiling `spacecan` library on host tests failed with `error[E0433]: cannot find module or crate std in this scope`.
+- **Root Cause**: Since `spacecan` core library is declared `#![no_std]`, the compiler does not automatically bring `std` into the namespace even when compiling for host environments where `std` is available.
+- **Fix**: Added `#[cfg(not(feature = "embedded"))] extern crate std;` to the top of the transport module files to tell the compiler to link `std` on host compilation runs.
+
+### Metrics
+- **Refactored Files**: 3 (`spacecan/src/transport/base.rs`, `spacecan/src/transport/frame_buffer.rs`, `spacecan/src/transport/mock.rs`).
+- **Workspace Build Check**: 100% successful with and without the `embedded` feature flag.
+- **Test Executions**: 6 integration tests executed and passed successfully.
+- **Compiler Failures**: 0.
+
+---
+
+### Next Steps
+Proceed to **Phase 3: Protocol Routing & Packet Assembly Fixes** to resolve the fragment reassembly logic error in `receive_frame`.

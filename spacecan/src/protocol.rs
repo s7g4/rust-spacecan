@@ -1,10 +1,10 @@
 extern crate alloc;
 
-use core::fmt;
-use alloc::vec::Vec;
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
 use crate::primitives::packet::{Packet, PacketAssembler};
 use crate::transport::base::Bus;
+use alloc::vec::Vec;
+use core::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpaceCANError {
@@ -43,8 +43,14 @@ pub struct SpaceCANFrame {
 #[cfg(all(feature = "defmt", not(test)))]
 impl Format for SpaceCANFrame {
     fn format(&self, fmt: Formatter) {
-        defmt::write!(fmt, "SpaceCANFrame {{ can_id: {}, service_type: {}, subservice_type: {}, node_id: {}, data: [", 
-            self.can_id, self.service_type, self.subservice_type, self.node_id);
+        defmt::write!(
+            fmt,
+            "SpaceCANFrame {{ can_id: {}, service_type: {}, subservice_type: {}, node_id: {}, data: [",
+            self.can_id,
+            self.service_type,
+            self.subservice_type,
+            self.node_id
+        );
         for byte in &self.data {
             defmt::write!(fmt, "{}, ", byte);
         }
@@ -53,16 +59,21 @@ impl Format for SpaceCANFrame {
 }
 
 impl SpaceCANFrame {
-    /// Creates a new SpaceCAN frame
-    pub fn new(can_id: u32, service_type: u8, subservice_type: u8, node_id: u32, data: Vec<u8>) -> Result<Self, SpaceCANError> {
+    pub fn new(
+        can_id: u32,
+        service_type: u8,
+        subservice_type: u8,
+        node_id: u32,
+        data: Vec<u8>,
+    ) -> Result<Self, SpaceCANError> {
         if can_id > crate::constants::CAN_ID_MASK {
             return Err(SpaceCANError::InvalidFrame);
         }
-        
+
         if node_id > crate::constants::NODE_ID_MASK {
             return Err(SpaceCANError::InvalidFrame);
         }
-        
+
         Ok(SpaceCANFrame {
             can_id,
             service_type,
@@ -71,19 +82,19 @@ impl SpaceCANFrame {
             data,
         })
     }
-    
+
     /// Creates a SpaceCAN frame from a CAN frame
     pub fn from_can_frame(can_frame: CanFrame) -> Result<Self, SpaceCANError> {
         let data = can_frame.data();
         if data.len() < 2 {
             return Err(SpaceCANError::InvalidFrame);
         }
-        
+
         let service_type = data[0];
         let subservice_type = data[1];
         let payload = data[2..].to_vec();
         let node_id = can_frame.get_node_id();
-        
+
         Ok(SpaceCANFrame {
             can_id: can_frame.can_id(),
             service_type,
@@ -92,19 +103,16 @@ impl SpaceCANFrame {
             data: payload,
         })
     }
-    
-    /// Converts to a CAN frame
+
     pub fn to_can_frame(&self) -> Result<CanFrame, SpaceCANError> {
         let mut frame_data = Vec::with_capacity(2 + self.data.len());
         frame_data.push(self.service_type);
         frame_data.push(self.subservice_type);
         frame_data.extend_from_slice(&self.data);
-        
-        CanFrame::new(self.can_id, Some(frame_data))
-            .map_err(|_| SpaceCANError::InvalidFrame)
+
+        CanFrame::new(self.can_id, Some(frame_data)).map_err(|_| SpaceCANError::InvalidFrame)
     }
-    
-    /// Get the function ID from the CAN ID
+
     pub fn get_function_id(&self) -> u32 {
         (self.can_id & crate::constants::FUNCTION_ID_MASK) >> 7
     }
@@ -118,7 +126,6 @@ pub struct SpaceCANProtocol<T: Bus> {
 }
 
 impl<T: Bus> SpaceCANProtocol<T> {
-    /// Creates a new SpaceCAN protocol instance
     pub fn new(transport: T, node_id: u32) -> Self {
         SpaceCANProtocol {
             transport,
@@ -126,28 +133,40 @@ impl<T: Bus> SpaceCANProtocol<T> {
             node_id,
         }
     }
-    
-    /// Send a SpaceCAN frame
+
     pub fn send_frame(&self, frame: &SpaceCANFrame) -> Result<(), SpaceCANError> {
         let can_frame = frame.to_can_frame()?;
-        self.transport.send(&can_frame)
+        self.transport
+            .send(&can_frame)
             .map_err(|_| SpaceCANError::TransportError)
     }
-    
+
     /// Send a large packet by fragmenting it across multiple CAN frames
-    pub fn send_packet(&self, service_type: u8, subservice_type: u8, target_node: u32, data: Vec<u8>) -> Result<(), SpaceCANError> {
+    pub fn send_packet(
+        &self,
+        service_type: u8,
+        subservice_type: u8,
+        target_node: u32,
+        data: Vec<u8>,
+    ) -> Result<(), SpaceCANError> {
         let packet = Packet::new(Some(data));
         let fragments = packet.split();
-        
+
         for fragment in fragments {
             let can_id = crate::constants::ID_TC | target_node;
-            let frame = SpaceCANFrame::new(can_id, service_type, subservice_type, self.node_id, fragment)?;
+            let frame = SpaceCANFrame::new(
+                can_id,
+                service_type,
+                subservice_type,
+                self.node_id,
+                fragment,
+            )?;
             self.send_frame(&frame)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Receive and process a CAN frame
     pub fn receive_frame(&mut self) -> Result<Option<SpaceCANFrame>, SpaceCANError> {
         if let Some(can_frame) = self.transport.get_frame() {
@@ -159,7 +178,7 @@ impl<T: Bus> SpaceCANProtocol<T> {
                     let service_type = data[0];
                     let subservice_type = data[1];
                     let payload = data[2..].to_vec();
-                    
+
                     let frame = SpaceCANFrame::new(
                         can_frame.can_id(),
                         service_type,
@@ -175,26 +194,22 @@ impl<T: Bus> SpaceCANProtocol<T> {
                 return Ok(Some(frame));
             }
         }
-        
+
         Ok(None)
     }
-    
-    /// Get the node ID
+
     pub fn node_id(&self) -> u32 {
         self.node_id
     }
-    
-    /// Start receiving frames
+
     pub fn start_receive(&self) {
         self.transport.start_receive();
     }
-    
-    /// Stop receiving frames
+
     pub fn stop_receive(&self) {
         self.transport.stop_receive();
     }
-    
-    /// Flush the frame buffer
+
     pub fn flush_buffer(&self) {
         self.transport.flush_frame_buffer();
     }

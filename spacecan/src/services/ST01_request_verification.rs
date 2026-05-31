@@ -1,9 +1,9 @@
 extern crate alloc;
 
-use alloc::vec::Vec;
-use alloc::collections::BTreeMap;
-use crate::services::core::{ServiceHandler, ServiceError};
 use crate::constants::ST01_REQUEST_VERIFICATION;
+use crate::services::core::{ServiceError, ServiceHandler};
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerificationStage {
@@ -40,20 +40,19 @@ impl RequestVerificationService {
             next_packet_id: 1,
         }
     }
-    
-    /// Generate verification report
+
     fn create_verification_report(
-        &self, 
-        stage: VerificationStage, 
-        result: VerificationResult, 
+        &self,
+        stage: VerificationStage,
+        result: VerificationResult,
         packet_id: u16,
-        error_code: Option<u16>
+        error_code: Option<u16>,
     ) -> Vec<u8> {
         let mut response = Vec::new();
-        
+
         // Packet identification
         response.extend_from_slice(&packet_id.to_be_bytes());
-        
+
         // Error code if failure
         if result == VerificationResult::Failure {
             if let Some(code) = error_code {
@@ -62,86 +61,91 @@ impl RequestVerificationService {
                 response.extend_from_slice(&[0xFF, 0xFF]); // Generic error
             }
         }
-        
+
         response
     }
-    
-    /// Accept a telecommand for processing
+
     pub fn accept_telecommand(&mut self, packet_id: u16, source_node: u32) -> Vec<u8> {
         let pending = PendingRequest {
             packet_id,
             source_node,
             stage: VerificationStage::Acceptance,
         };
-        
+
         self.pending_requests.insert(packet_id, pending);
-        
+
         self.create_verification_report(
             VerificationStage::Acceptance,
             VerificationResult::Success,
             packet_id,
-            None
+            None,
         )
     }
-    
-    /// Reject a telecommand
+
     pub fn reject_telecommand(&mut self, packet_id: u16, error_code: u16) -> Vec<u8> {
         self.pending_requests.remove(&packet_id);
-        
+
         self.create_verification_report(
             VerificationStage::Acceptance,
             VerificationResult::Failure,
             packet_id,
-            Some(error_code)
+            Some(error_code),
         )
     }
-    
-    /// Report telecommand execution start
+
     pub fn report_start(&mut self, packet_id: u16) -> Result<Vec<u8>, ServiceError> {
         if !self.pending_requests.contains_key(&packet_id) {
             return Err(ServiceError::InvalidPacket);
         }
-        
+
         Ok(self.create_verification_report(
             VerificationStage::Start,
             VerificationResult::Success,
             packet_id,
-            None
+            None,
         ))
     }
-    
-    /// Report telecommand execution completion
-    pub fn report_completion(&mut self, packet_id: u16, success: bool, error_code: Option<u16>) -> Vec<u8> {
+
+    pub fn report_completion(
+        &mut self,
+        packet_id: u16,
+        success: bool,
+        error_code: Option<u16>,
+    ) -> Vec<u8> {
         self.pending_requests.remove(&packet_id);
-        
+
         let result = if success {
             VerificationResult::Success
         } else {
             VerificationResult::Failure
         };
-        
+
         self.create_verification_report(
             VerificationStage::Completion,
             result,
             packet_id,
-            error_code
+            error_code,
         )
     }
-    
-    /// Get pending request count
+
     pub fn pending_count(&self) -> usize {
         self.pending_requests.len()
     }
 }
 
 impl ServiceHandler for RequestVerificationService {
-    fn handle_request(&mut self, subservice: u8, data: &[u8], source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+    fn handle_request(
+        &mut self,
+        subservice: u8,
+        data: &[u8],
+        source_node: u32,
+    ) -> Result<Option<Vec<u8>>, ServiceError> {
         if data.len() < 2 {
             return Err(ServiceError::InvalidPacket);
         }
-        
+
         let packet_id = u16::from_be_bytes([data[0], data[1]]);
-        
+
         match subservice {
             1 => {
                 // Acceptance Success Report Request
@@ -181,7 +185,7 @@ impl ServiceHandler for RequestVerificationService {
             _ => Err(ServiceError::UnknownService),
         }
     }
-    
+
     fn get_service_type(&self) -> u8 {
         ST01_REQUEST_VERIFICATION
     }

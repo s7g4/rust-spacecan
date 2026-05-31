@@ -1,28 +1,13 @@
 extern crate alloc;
 
-// println macro for no_std compatibility
-macro_rules! println {
-    ($($arg:tt)*) => {};
-}
-
-use core::fmt;
 use alloc::vec;
 use alloc::vec::Vec;
-use alloc::string::{String, ToString};
-use alloc::format;
+use core::fmt;
 
 const FULL_MASK: u32 = 0x7FF;
 const FUNCTION_MASK: u32 = 0x780;
 const NODE_MASK: u32 = 0x07F;
 const MAX_DATA_LENGTH: usize = 8;
-
-const ID_SYNC: u32 = 0x080;
-const ID_HEARTBEAT: u32 = 0x700;
-const ID_SCET: u32 = 0x180;
-const ID_UTC: u32 = 0x200;
-const ID_TC: u32 = 0x280;
-const ID_TM: u32 = 0x300;
-const ID_MESSAGE: u32 = 0x380;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanFrameError {
@@ -90,7 +75,7 @@ impl CanFrame {
         self.can_id
     }
 
-    pub fn data(&self) -> &Vec<u8> {
+    pub fn data(&self) -> &[u8] {
         &self.data
     }
 }

@@ -1,10 +1,10 @@
 extern crate alloc;
 
-use alloc::vec::Vec;
+use crate::constants::ST08_FUNCTION_MANAGEMENT;
+use crate::services::core::{ServiceError, ServiceHandler};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
-use crate::services::core::{ServiceHandler, ServiceError};
-use crate::constants::ST08_FUNCTION_MANAGEMENT;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone)]
 pub struct Function {
@@ -28,9 +28,12 @@ impl FunctionManagementService {
             next_function_id: 1,
         }
     }
-    
-    /// Perform function
-    pub fn perform_function(&mut self, function_id: u16, arguments: Vec<u8>) -> Result<Vec<u8>, ServiceError> {
+
+    pub fn perform_function(
+        &mut self,
+        function_id: u16,
+        arguments: Vec<u8>,
+    ) -> Result<Vec<u8>, ServiceError> {
         if let Some(function) = self.functions.get(&function_id) {
             if function.enabled {
                 // Simulate function execution
@@ -46,24 +49,22 @@ impl FunctionManagementService {
             Err(ServiceError::InvalidPacket)
         }
     }
-    
-    /// Register a function
+
     pub fn register_function(&mut self, function_name: String) -> u16 {
         let function_id = self.next_function_id;
         self.next_function_id = self.next_function_id.wrapping_add(1);
-        
+
         let function = Function {
             function_id,
             function_name,
             enabled: true,
             arguments: Vec::new(),
         };
-        
+
         self.functions.insert(function_id, function);
         function_id
     }
-    
-    /// Enable function
+
     pub fn enable_function(&mut self, function_id: u16) -> Result<(), ServiceError> {
         if let Some(function) = self.functions.get_mut(&function_id) {
             function.enabled = true;
@@ -72,8 +73,7 @@ impl FunctionManagementService {
             Err(ServiceError::InvalidPacket)
         }
     }
-    
-    /// Disable function
+
     pub fn disable_function(&mut self, function_id: u16) -> Result<(), ServiceError> {
         if let Some(function) = self.functions.get_mut(&function_id) {
             function.enabled = false;
@@ -82,41 +82,44 @@ impl FunctionManagementService {
             Err(ServiceError::InvalidPacket)
         }
     }
-    
-    /// Get function status
+
     pub fn get_function_status(&self, function_id: u16) -> Option<bool> {
         self.functions.get(&function_id).map(|f| f.enabled)
     }
-    
-    /// Get all registered functions
+
     pub fn get_functions(&self) -> Vec<u16> {
         self.functions.keys().copied().collect()
     }
 }
 
 impl ServiceHandler for FunctionManagementService {
-    fn handle_request(&mut self, subservice: u8, data: &[u8], _source_node: u32) -> Result<Option<Vec<u8>>, ServiceError> {
+    fn handle_request(
+        &mut self,
+        subservice: u8,
+        data: &[u8],
+        _source_node: u32,
+    ) -> Result<Option<Vec<u8>>, ServiceError> {
         match subservice {
             1 => {
                 // Perform function
                 if data.len() < 2 {
                     return Err(ServiceError::InvalidPacket);
                 }
-                
+
                 let function_id = u16::from_be_bytes([data[0], data[1]]);
                 let arguments = if data.len() > 2 {
                     data[2..].to_vec()
                 } else {
                     Vec::new()
                 };
-                
+
                 let response = self.perform_function(function_id, arguments)?;
                 Ok(Some(response))
             }
             _ => Err(ServiceError::UnknownService),
         }
     }
-    
+
     fn get_service_type(&self) -> u8 {
         ST08_FUNCTION_MANAGEMENT
     }

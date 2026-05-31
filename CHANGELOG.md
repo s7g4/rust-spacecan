@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file
 
+## [0.1.2] - 2026-05-31
+
+### Changed
+- Refactored `BusImpl` in `spacecan/src/transport/base.rs` from `UnsafeCell` to target-specific Mutex wrappers (standard `std::sync::Mutex` on host, `cortex_m::interrupt::Mutex` on embedded), resolving potential concurrency undefined behavior (UB).
+- Updated `FrameBuffer` in `spacecan/src/transport/frame_buffer.rs` to use `std::sync::Mutex` on host configurations.
+- Updated `MockTransport` in `spacecan/src/transport/mock.rs` to use `std::sync::Mutex` on host.
+- Declared `extern crate std` on host configurations inside `#![no_std]` core transport modules.
+
 ## [0.1.1] - 2026-05-31
 
 ### Added
