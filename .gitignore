@@ -45,3 +45,8 @@ ehthumbs.db
 
 # Backup and temporary files
 *.swp
+
+# R history files
+.Rhistory
+.RData
+
