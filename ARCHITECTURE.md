@@ -1,7 +1,5 @@
 # Architecture Redesign: rust-spacecan
 
-This document details the systems architecture of `rust-spacecan`, focusing on hardware-software decoupling, strict memory safety, thread safety, and platform-agnostic simulation.
-
 ## 1. High-Level System Architecture
 
 `rust-spacecan` utilizes a modular layered architecture, ensuring the core protocol logic remains completely isolated from hardware-specific registers.

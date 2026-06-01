@@ -19,12 +19,5 @@ cortex-m = { version = "0.7", optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 embedded-hal = { version = "0.2", optional = true }
 nb = { version = "1.0", optional = true }
-linked_list_allocator = "0.10"
 defmt = { version = "0.3", optional = true }
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
 

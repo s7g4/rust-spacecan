@@ -1,9 +1,5 @@
 # Metrics: rust-spacecan
 
-This document tracks lines of code, test coverage, build metrics, and target sizes to measure engineering health.
-
----
-
 ## 1. Codebase Size Metrics (Phase 1)
 
 | Crate / Directory | Files Count | Lines of Code (LOC) | Notes |

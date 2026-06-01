@@ -1,11 +1,5 @@
 # Project Audit: rust-spacecan
 
-This document provides a comprehensive technical audit of the `rust-spacecan` workspace. It identifies current project capabilities, structural discrepancies, architectural weaknesses, safety violations, and compilation issues.
-
-## 1. What Exists
-
-The workspace currently consists of a multi-crate Rust project structured as follows:
-
 - **`spacecan` (Core Library Crate)**:
   - **`primitives/`**: Data models for `CanFrame`, `HeartbeatData`, `SyncData`, `NodeInfo`, and `Packet` (fragmentation), plus a timer-helper.
   - **`services/`**: Incomplete implementations of ECSS-E-ST-70-41C (Packet Utilization Standard - PUS) services:
@@ -82,7 +76,7 @@ fn interrupt_free<F, R>(f: F) -> R { f() }
 - **Crate Hardware target**: `spacecan-firmware`'s `Cargo.toml` currently references `stm32g0xx-hal` (Cortex-M0+ MCU).
 - **Target JSON**: The workspace contains `thumbv7em-none-eabihf.json` configured for a Cortex-M7 core (`"cpu": "cortex-m7"`).
 - **Memory.x**: Configured for `STM32F767ZI` (2MB FLASH, 512KB RAM).
-- **Design Decision**: We will align the hardware target on **STM32F4** (Cortex-M4, e.g. STM32F407 on STM32F4Discovery board, native `thumbv7em-none-eabihf` target) as specified in the original readme and simulation specs.
+- **Design Decision**: The hardware target will be aligned on **STM32F4** (Cortex-M4, e.g. STM32F407 on STM32F4Discovery board, native `thumbv7em-none-eabihf` target) as specified in the original readme and simulation specs.
 - **Impact**: The HAL must be replaced with `stm32f4xx-hal` and `memory.x` updated to fit the STM32F4 memory layout. The Cortex-M7 target JSON should either be modified for Cortex-M4 or replaced with standard target flags.
 
 ### F. Missing Simulation Files
@@ -102,7 +96,7 @@ The root `README.md` documents a `renode/` directory with script files like `spa
 - **Transport Safety Wrapper**:
   - Replace the `UnsafeCell`-based loopback with thread-safe types (`spin::Mutex` or cross-platform primitives) for `no_std`, and standard `std::sync::Mutex` or channels for `std`.
 - **Platform-Agnostic Virtual Transport**:
-  - Rewrite `spacecan-virtual`'s transport layer to support cross-platform mock loops or UDP/TCP socket-based CAN framing so that simulations can run seamlessly on Windows, macOS, and Linux without raw SocketCAN system calls.
+  - Rewrite `spacecan-virtual`'s transport layer to support cross-platform mock loops or UDP/TCP socket-based CAN framing so that simulations can run on Windows, macOS, and Linux without raw SocketCAN system calls.
 - **Packet Assembler Router**:
   - Redesign `receive_frame` so that incomplete fragments are safely buffered and ignored by the service router until the assembly is complete.
 - **Firmware Crate Integration**:

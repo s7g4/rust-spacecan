@@ -1,7 +1,5 @@
 # Engineering Roadmap: rust-spacecan
 
-This document details the multi-phase engineering plan to resolve current architectural issues, implement clean targets, and package `rust-spacecan` as a high-quality portfolio project.
-
 ## Phase 1: Workspace Sanitization & Cross-Platform Portability
 - **Goal**: Resolve immediate compiler errors on Windows, clean up orphaned files, and set up cargo profiles.
 - **Why it Exists**: Unlocks multi-developer collaboration and local development on Windows systems by removing platform-specific SocketCAN blockers.
@@ -41,7 +39,7 @@ This document details the multi-phase engineering plan to resolve current archit
 - **Risks**: Fragile packet logic might introduce latency if timeouts are poorly configured.
 - **Success Criteria**: Integration test demonstrates multi-frame packets assembling and routing correctly, without fragment leakage.
 - **Metrics**: 100% of fragmented test packets assemble successfully.
-- **Deliverables**: Rewritten `receive_frame` logic; robust fragmentation unit tests.
+- **Deliverables**: Rewritten `receive_frame` logic; fragmentation unit tests.
 - **Expected Commits**:
   - `fix: correct packet reassembly fragment leakage in receive_frame`
   - `test: add unit tests for multi-frame packet reassembly`
@@ -64,7 +62,7 @@ This document details the multi-phase engineering plan to resolve current archit
 
 ## Phase 5: Virtual UDP Multi-Node Simulation Network
 - **Goal**: Implement a platform-agnostic virtual transport using UDP sockets.
-- **Why it Exists**: Replaces SocketCAN with a cross-platform emulation socket that runs seamlessly on Windows and Linux without system-level dependencies.
+- **Why it Exists**: Replaces SocketCAN with a cross-platform emulation socket that runs on Windows and Linux without system-level dependencies.
 - **Inputs**: `spacecan-virtual/` crate.
 - **Outputs**: Interactive simulation binaries (`controller`, `responder`) working via UDP multicast.
 - **Dependencies**: Phase 3 completed.

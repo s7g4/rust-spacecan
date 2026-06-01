@@ -1,7 +1,5 @@
 # Research Foundation: rust-spacecan
 
-This document maps the domains, standards, academic papers, and technical specifications governing the design of the `rust-spacecan` protocol stack.
-
 ## 1. Domain: Embedded Systems (Cortex-M4 / STM32F4)
 
 ### A. Required Knowledge
