@@ -13,5 +13,5 @@ The initial `spacecan-virtual` simulation tool had a hard workspace-wide depende
 
 ## Consequences
 - **Positive**: The workspace compiles cleanly on Windows development environments, removing development blocks.
-- **Positive**: Prepares the virtualization layer for a platform-independent UDP multicast network in Phase 5.
-- **Negative**: The virtual simulation commands (`run-virtual`) do not execute CAN frames on Windows yet; this will be resolved in Phase 5 when we implement the virtual UDP transport.
+- **Positive**: Prepares the virtualization layer for a platform-independent UDP multicast network.
+- **Negative**: The virtual simulation commands (`run-virtual`) do not execute CAN frames on Windows yet; this will be resolved when we implement the virtual UDP transport.

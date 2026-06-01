@@ -1,7 +1,6 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 
-#[cfg(target_os = "linux")]
-use socketcan::EmbeddedFrame;
+use anyhow::Result;
 use spacecan::Packet;
 use spacecan::services::ST01_request_verification;
 use spacecan::services::ST03_housekeeping;
@@ -9,74 +8,19 @@ use spacecan::services::ST08_function_management;
 use spacecan::services::ST17_test;
 use spacecan::services::ST20_parameter_management;
 
-#[cfg(all(feature = "async", target_os = "linux"))]
-use futures_core::stream::Stream;
-#[cfg(all(feature = "async", target_os = "linux"))]
-use std::convert::TryInto;
-#[cfg(all(feature = "async", target_os = "linux"))]
-use std::pin::Pin;
-#[cfg(all(feature = "async", target_os = "linux"))]
-use std::sync::mpsc::{self, Receiver};
-#[cfg(all(feature = "async", target_os = "linux"))]
-use std::task::{Context, Poll};
-#[cfg(all(feature = "async", target_os = "linux"))]
-use std::thread;
-#[cfg(all(feature = "async", target_os = "linux"))]
-use tokio_stream::StreamExt;
+#[path = "network.rs"]
+mod network;
 
-#[cfg(all(feature = "async", target_os = "linux"))]
-struct CanSocketStream {
-    receiver: Receiver<Result<socketcan::CanFrame, std::io::Error>>,
-}
-
-#[cfg(all(feature = "async", target_os = "linux"))]
-impl Stream for CanSocketStream {
-    type Item = Result<socketcan::CanFrame, std::io::Error>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.receiver.try_recv() {
-            Ok(frame) => Poll::Ready(Some(frame)),
-            Err(mpsc::TryRecvError::Empty) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(mpsc::TryRecvError::Disconnected) => Poll::Ready(None),
-        }
-    }
-}
-
-#[cfg(all(feature = "async", target_os = "linux"))]
-impl CanSocketStream {
-    fn new(socket: socketcan::CanSocket) -> Self {
-        let (tx, rx) = mpsc::channel();
-
-        thread::spawn(move || {
-            loop {
-                match socketcan::Socket::read_frame(&socket) {
-                    Ok(frame) => {
-                        if tx.send(Ok(frame)).is_err() {
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e));
-                        break;
-                    }
-                }
-            }
-        });
-
-        CanSocketStream { receiver: rx }
-    }
-}
-
-#[cfg(all(feature = "async", target_os = "linux"))]
+#[cfg(feature = "async")]
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let socket = socketcan::Socket::open("vcan0")?;
-    let mut stream = CanSocketStream::new(socket);
+async fn main() -> Result<()> {
+    let socket = network::create_multicast_socket()?;
+    println!(
+        "Responder listening on UDP Multicast {}...",
+        network::MULTICAST_ADDR
+    );
 
-    println!("Responder listening on vcan0...");
+    let mut buf = vec![0u8; 1024];
 
     // Instantiate services
     let mut function_management = ST08_function_management::FunctionManagementService::new();
@@ -85,21 +29,19 @@ async fn main() -> anyhow::Result<()> {
     let mut housekeeping = ST03_housekeeping::HousekeepingService::new();
     let mut test_service = ST17_test::TestService::new();
 
-    while let Some(frame_result) = stream.next().await {
-        match frame_result {
-            Ok(frame) => {
-                let id = socketcan::EmbeddedFrame::id(&frame);
-                let data = socketcan::EmbeddedFrame::data(&frame);
-
-                let raw_id = match id {
-                    socketcan::Id::Standard(id_val) => id_val.as_raw(),
-                    socketcan::Id::Extended(id_val) => id_val.as_raw().try_into().unwrap(),
+    loop {
+        match socket.recv_from(&mut buf).await {
+            Ok((len, _addr)) => {
+                let frame: network::UdpCanFrame = match serde_json::from_slice(&buf[..len]) {
+                    Ok(f) => f,
+                    Err(_) => continue, // ignore non-JSON junk on this port
                 };
 
-                // Example: dispatch frame to services based on raw_id or other criteria
+                let raw_id = frame.id;
+                let data = frame.data;
+
                 match raw_id {
                     0x700 => {
-                        // Heartbeat frame
                         println!("Heartbeat received: counter={:?}", data);
                     }
                     0x080 => {
@@ -118,13 +60,13 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
                     _ => {
-                        // Dispatch to services here, example:
-                        let _ = function_management.perform_function(raw_id, data.to_vec());
+                        let _ = function_management.perform_function(raw_id as u16, data.to_vec());
                         let _ =
-                            request_verification.accept_telecommand(raw_id, raw_id as u32);
-                        let _ = parameter_management.report_parameter_values(vec![raw_id]);
-                        let _ = housekeeping.create_report(vec![raw_id], 0);
+                            request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
+                        let _ = parameter_management.report_parameter_values(vec![raw_id as u16]);
+                        let _ = housekeeping.create_report(vec![raw_id as u16], 0);
                         let _ = test_service.create_connection_test(raw_id as u32);
+
                         println!(
                             "Other CAN frame received: id=0x{:X} data={:?}",
                             raw_id, data
@@ -132,7 +74,6 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                // Display menu correspondence: print a summary line for each service
                 println!("Service status:");
                 println!("Function Management: last processed ID 0x{:X}", raw_id);
                 println!("Request Verification: last processed ID 0x{:X}", raw_id);
@@ -141,21 +82,13 @@ async fn main() -> anyhow::Result<()> {
                 println!("Test Service: last processed ID 0x{:X}", raw_id);
             }
             Err(e) => {
-                eprintln!("Error reading CAN frame: {}", e);
+                eprintln!("Error reading UDP frame: {}", e);
             }
         }
     }
-
-    Ok(())
 }
 
-// Remove all the incorrect trait implementations as they don't exist in the actual services
-
-#[cfg(not(all(feature = "async", target_os = "linux")))]
+#[cfg(not(feature = "async"))]
 fn main() {
-    #[cfg(not(feature = "async"))]
     println!("Async feature disabled. This binary does nothing.");
-
-    #[cfg(all(feature = "async", not(target_os = "linux")))]
-    println!("error: socketcan requires linux");
 }

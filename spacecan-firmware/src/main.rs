@@ -3,23 +3,19 @@
 
 extern crate alloc;
 
+use bxcan::{Fifo, Frame, Id, StandardId, filter::Mask32};
 use core::cell::RefCell;
-use cortex_m::interrupt::{free, Mutex};
+use cortex_m::interrupt::{Mutex, free};
 use cortex_m_rt::entry;
+use linked_list_allocator::LockedHeap;
 #[cfg(not(test))]
 use panic_halt as _;
-use stm32f4xx_hal::{
-    can::Can,
-    pac,
-    prelude::*,
-};
-use bxcan::{filter::Mask32, Fifo, Frame, Id, StandardId};
 use spacecan::{
     primitives::can_frame::{CanFrame, CanFrameError},
     protocol::SpaceCANProtocol,
     transport::base::Bus,
 };
-use linked_list_allocator::LockedHeap;
+use stm32f4xx_hal::{can::Can, pac, prelude::*};
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
@@ -52,7 +48,8 @@ impl Bus for HardwareBus {
         let frame = Frame::new_data(id, data);
         free(|cs| {
             let mut can = self.can.borrow(cs).borrow_mut();
-            can.transmit(&frame).map_err(|_| CanFrameError::SendFailed)?;
+            can.transmit(&frame)
+                .map_err(|_| CanFrameError::SendFailed)?;
             Ok(())
         })
     }
@@ -82,7 +79,8 @@ impl Bus for HardwareBus {
 fn main() -> ! {
     // Initialize heap allocator
     unsafe {
-        static mut HEAP: [core::mem::MaybeUninit<u8>; HEAP_SIZE] = [core::mem::MaybeUninit::uninit(); HEAP_SIZE];
+        static mut HEAP: [core::mem::MaybeUninit<u8>; HEAP_SIZE] =
+            [core::mem::MaybeUninit::uninit(); HEAP_SIZE];
         let heap_ptr = core::ptr::addr_of_mut!(HEAP) as *mut u8;
         ALLOCATOR.lock().init(heap_ptr, HEAP_SIZE);
     }
@@ -92,7 +90,12 @@ fn main() -> ! {
 
     // Configure clocks
     let rcc = dp.RCC.constrain();
-    let _clocks = rcc.cfgr.sysclk(168.MHz()).pclk1(42.MHz()).pclk2(84.MHz()).freeze();
+    let _clocks = rcc
+        .cfgr
+        .sysclk(168.MHz())
+        .pclk1(42.MHz())
+        .pclk2(84.MHz())
+        .freeze();
 
     // Configure CAN GPIOs
     let gpiob = dp.GPIOB.split();

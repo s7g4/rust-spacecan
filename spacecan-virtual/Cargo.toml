@@ -12,10 +12,12 @@ anyhow = "1.0.98"
 futures-core = "0.3.31"
 tokio = { version = "1", features = ["full"], optional = true }
 tokio-stream = { version = "0.1.17", optional = true }
+socket2 = { version = "0.5", features = ["all"] }
 spacecan = { path = "../spacecan", features = ["std"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-socketcan = "2.1.0"
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [[bin]]
 name = "responder"
@@ -24,3 +26,7 @@ path = "responder.rs"
 [[bin]]
 name = "controller"
 path = "controller.rs"
+
+[[bin]]
+name = "dashboard-server"
+path = "dashboard_server.rs"

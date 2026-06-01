@@ -8,7 +8,7 @@ The core `spacecan` library crate unconditionally registered a static `LockedHea
 
 ## Decision
 1. **Remove Library Allocator Registry**: Delete the `#[global_allocator]` static allocator declaration and `init_allocator()` function from the library crate.
-2. **Binary-Level Allocation**: Delegate all allocator registrations to binary and firmware targets (e.g. `spacecan-firmware` in Phase 4). 
+2. **Binary-Level Allocation**: Delegate all allocator registrations to binary and firmware targets. 
 3. **Remove Redundant Binary Target**: Remove the redundant embedded `main.rs` binary configuration from the library crate to enforce a clear library boundary.
 
 ## Consequences

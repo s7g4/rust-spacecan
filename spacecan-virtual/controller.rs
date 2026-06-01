@@ -1,8 +1,6 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 
-use anyhow::{Result, anyhow};
-#[cfg(target_os = "linux")]
-use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Socket, StandardId};
+use anyhow::Result;
 use std::io::{self, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -13,32 +11,34 @@ use spacecan::services::{
     ST20_parameter_management,
 };
 
-#[cfg(all(feature = "async", target_os = "linux"))]
+#[path = "network.rs"]
+mod network;
+
+#[cfg(feature = "async")]
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Open CAN socket on vcan0
-    let socket: CanSocket = Socket::open("vcan0")?;
-
-    // Channel for sending commands from menu to CAN sender task
+    // Channel for sending commands from menu to sender task
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<String>(10);
 
     // Shared state for sent and received data
     let (sent_tx, mut sent_rx) = mpsc::channel::<String>(100);
     let (recv_tx, mut recv_rx) = mpsc::channel::<String>(100);
 
-    // Spawn task to send heartbeat and sync frames
-    let sender_socket: CanSocket = Socket::open("vcan0")?;
+    let sender_socket = network::create_multicast_socket()?;
     let sent_tx_clone = sent_tx.clone();
+
     tokio::spawn(async move {
         let mut heartbeat_counter: u32 = 0;
         let mut sync_counter: u32 = 0;
 
         loop {
             // Send heartbeat frame every 1 second
-            let heartbeat_id = StandardId::new(0x700).unwrap();
-            let heartbeat_data = heartbeat_counter.to_be_bytes(); // 4 bytes
-            let heartbeat_frame = CanFrame::new(heartbeat_id, &heartbeat_data).unwrap();
-            if let Err(e) = sender_socket.write_frame(&heartbeat_frame) {
+            let heartbeat_frame = network::UdpCanFrame {
+                id: 0x700,
+                data: heartbeat_counter.to_be_bytes().to_vec(),
+            };
+
+            if let Err(e) = network::send_multicast(&sender_socket, &heartbeat_frame).await {
                 let _ = sent_tx_clone
                     .send(format!("Error sending heartbeat: {}", e))
                     .await;
@@ -50,11 +50,12 @@ async fn main() -> Result<()> {
             heartbeat_counter = heartbeat_counter.wrapping_add(1);
 
             // Every 5 seconds send SYNC frame and time frames
-            if sync_counter.is_multiple_of(5) {
-                // SYNC frame (ID 0x080, empty payload)
-                let sync_id = StandardId::new(0x080).unwrap();
-                let sync_frame = CanFrame::new(sync_id, &[]).unwrap();
-                if let Err(e) = sender_socket.write_frame(&sync_frame) {
+            if sync_counter % 5 == 0 {
+                let sync_frame = network::UdpCanFrame {
+                    id: 0x080,
+                    data: vec![],
+                };
+                if let Err(e) = network::send_multicast(&sender_socket, &sync_frame).await {
                     let _ = sent_tx_clone
                         .send(format!("Error sending SYNC frame: {}", e))
                         .await;
@@ -62,15 +63,15 @@ async fn main() -> Result<()> {
                     let _ = sent_tx_clone.send("Sent SYNC frame".to_string()).await;
                 }
 
-                // Send SCET (Spacecraft Event Time) - simulate as UNIX timestamp (u64)
                 let scet = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .expect("Time went backwards")
+                    .unwrap()
                     .as_secs();
-                let scet_bytes = scet.to_be_bytes();
-                let scet_id = StandardId::new(0x100).unwrap();
-                let scet_frame = CanFrame::new(scet_id, &scet_bytes[0..8]).unwrap();
-                if let Err(e) = sender_socket.write_frame(&scet_frame) {
+                let scet_frame = network::UdpCanFrame {
+                    id: 0x100,
+                    data: scet.to_be_bytes().to_vec(),
+                };
+                if let Err(e) = network::send_multicast(&sender_socket, &scet_frame).await {
                     let _ = sent_tx_clone
                         .send(format!("Error sending SCET frame: {}", e))
                         .await;
@@ -78,15 +79,15 @@ async fn main() -> Result<()> {
                     let _ = sent_tx_clone.send(format!("Sent SCET: {}", scet)).await;
                 }
 
-                // Send UTC time as seconds since UNIX_EPOCH too (just a demo)
                 let utc = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .expect("Time went backwards")
+                    .unwrap()
                     .as_secs();
-                let utc_bytes = utc.to_be_bytes();
-                let utc_id = StandardId::new(0x101).unwrap();
-                let utc_frame = CanFrame::new(utc_id, &utc_bytes[0..8]).unwrap();
-                if let Err(e) = sender_socket.write_frame(&utc_frame) {
+                let utc_frame = network::UdpCanFrame {
+                    id: 0x101,
+                    data: utc.to_be_bytes().to_vec(),
+                };
+                if let Err(e) = network::send_multicast(&sender_socket, &utc_frame).await {
                     let _ = sent_tx_clone
                         .send(format!("Error sending UTC frame: {}", e))
                         .await;
@@ -97,14 +98,11 @@ async fn main() -> Result<()> {
 
             sync_counter += 1;
 
-            // Check for commands from menu (non-blocking)
             if let Ok(cmd) = cmd_rx.try_recv() {
-                // Handle service functionality commands here
                 let _ = sent_tx_clone
                     .send(format!("Received command: {}", cmd))
                     .await;
 
-                // Example: parse command and call ST service functions
                 match cmd.as_str() {
                     "st01" => {
                         let mut service =
@@ -137,8 +135,7 @@ async fn main() -> Result<()> {
                             .await;
                     }
                     "st20" => {
-                        let service =
-                            ST20_parameter_management::ParameterManagementService::new();
+                        let service = ST20_parameter_management::ParameterManagementService::new();
                         let _ = service.report_parameter_values(vec![1]);
                         let _ = sent_tx_clone
                             .send("ST20 service command executed".to_string())
@@ -156,20 +153,18 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Spawn task to receive CAN frames
-    let recv_socket: CanSocket = Socket::open("vcan0")?;
+    let recv_socket = network::create_multicast_socket()?;
     let recv_tx_clone = recv_tx.clone();
     tokio::spawn(async move {
+        let mut buf = vec![0u8; 1024];
         loop {
-            match recv_socket.read_frame() {
-                Ok(frame) => {
-                    let id = match frame.id() {
-                        socketcan::Id::Standard(sid) => sid.as_raw() as u32,
-                        socketcan::Id::Extended(eid) => eid.as_raw(),
-                    };
-                    let data = frame.data();
-                    let msg = format!("Received frame: ID=0x{:X}, Data={:?}", id, data);
-                    let _ = recv_tx_clone.send(msg).await;
+            match recv_socket.recv_from(&mut buf).await {
+                Ok((len, _addr)) => {
+                    if let Ok(frame) = serde_json::from_slice::<network::UdpCanFrame>(&buf[..len]) {
+                        let msg =
+                            format!("Received frame: ID=0x{:X}, Data={:?}", frame.id, frame.data);
+                        let _ = recv_tx_clone.send(msg).await;
+                    }
                 }
                 Err(e) => {
                     let _ = recv_tx_clone
@@ -177,16 +172,13 @@ async fn main() -> Result<()> {
                         .await;
                 }
             }
-            sleep(Duration::from_millis(100)).await;
         }
     });
 
-    // Menu interface task
     loop {
-        // Clear screen
         print!("\x1B[2J\x1B[1;1H");
-        println!("SpaceCAN Virtual Controller");
-        println!("============================");
+        println!("SpaceCAN Virtual Controller (UDP Multicast)");
+        println!("===========================================");
         println!("Menu:");
         println!("1. Show sent data");
         println!("2. Show received data");
@@ -232,36 +224,19 @@ async fn main() -> Result<()> {
 
                 match st_choice {
                     "1" => {
-                        println!("Invoking ST01 Request Verification Service...");
-                        // Call a representative function from ST01_request_verification
-                        let mut service =
-                            ST01_request_verification::RequestVerificationService::new();
-                        // Example call to accept_telecommand
-                        service.accept_telecommand(1, 0);
+                        let _ = cmd_tx.send("st01".to_string()).await;
                     }
                     "2" => {
-                        println!("Invoking ST08 Function Management Service...");
-                        let mut service =
-                            ST08_function_management::FunctionManagementService::new();
-                        // Example call to perform_function
-                        let _ = service.perform_function(1, vec![]);
+                        let _ = cmd_tx.send("st08".to_string()).await;
                     }
                     "3" => {
-                        println!("Invoking ST03 Housekeeping Service...");
-                        let mut service = ST03_housekeeping::HousekeepingService::new();
-                        // Example call to create_report
-                        service.create_report(vec![1], 0u32);
+                        let _ = cmd_tx.send("st03".to_string()).await;
                     }
                     "4" => {
-                        println!("Invoking ST17 Test Service...");
-                        let mut service = ST17_test::TestService::new();
-                        service.create_connection_test(1);
+                        let _ = cmd_tx.send("st17".to_string()).await;
                     }
                     "5" => {
-                        println!("Invoking ST20 Parameter Management Service...");
-                        let service =
-                            ST20_parameter_management::ParameterManagementService::new();
-                        let _ = service.report_parameter_values(vec![1]);
+                        let _ = cmd_tx.send("st20".to_string()).await;
                     }
                     "b" => {
                         println!("Returning to main menu...");
@@ -295,11 +270,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(all(feature = "async", target_os = "linux")))]
+#[cfg(not(feature = "async"))]
 fn main() {
-    #[cfg(not(feature = "async"))]
     println!("Async feature disabled. This binary does nothing.");
-
-    #[cfg(all(feature = "async", not(target_os = "linux")))]
-    println!("error: socketcan requires linux");
 }

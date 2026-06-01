@@ -3,7 +3,7 @@
 ## Day 1: 2026-05-31
 
 ### Goal
-Execute **Phase 1: Workspace Sanitization & OS Portability** to ensure the entire workspace compiles and tests run successfully on Windows host development machines.
+Execute **Workspace Sanitization & OS Portability** to ensure the entire workspace compiles and tests run successfully on Windows host development machines.
 
 ### Work Completed
 1. Deleted orphaned/unused code files in `spacecan/src/` (`reciever.rs`, `controller.rs`, `parser.rs`) that clutter the module system.
@@ -61,14 +61,14 @@ Execute **Phase 1: Workspace Sanitization & OS Portability** to ensure the entir
 ---
 
 ### Next Steps
-Proceed to **Phase 2: Allocator & Thread-Safety (UB) Refactoring** to replace target-unsafe internal mutability wrappers with thread-safe types, and restructure multi-threading layers.
+Proceed to **Allocator & Thread-Safety (UB) Refactoring** to replace target-unsafe internal mutability wrappers with thread-safe types, and restructure multi-threading layers.
 
 ---
 
 ## Day 2: 2026-05-31
 
 ### Goal
-Execute **Phase 2: Memory Integrity & Concurrency Safety** to replace the unsafe `UnsafeCell` loopback and target-unsafe `RefCell` structures in `spacecan/src/transport/` with target-specific safe `Mutex` primitives.
+Execute **Memory Integrity & Concurrency Safety** to replace the unsafe `UnsafeCell` loopback and target-unsafe `RefCell` structures in `spacecan/src/transport/` with target-specific safe `Mutex` primitives.
 
 ### Work Completed
 1. Refactored `BusImpl` in `spacecan/src/transport/base.rs` to replace `UnsafeCell` with `std::sync::Mutex` on host and `cortex_m::interrupt::Mutex` + `RefCell` on embedded.
@@ -94,4 +94,4 @@ Execute **Phase 2: Memory Integrity & Concurrency Safety** to replace the unsafe
 ---
 
 ### Next Steps
-Proceed to **Phase 3: Protocol Routing & Packet Assembly Fixes** to resolve the fragment reassembly logic error in `receive_frame`.
+Proceed to **Protocol Routing & Packet Assembly Fixes** to resolve the fragment reassembly logic error in `receive_frame`.
