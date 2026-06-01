@@ -1,18 +1,18 @@
 #![no_std]
 #![no_main]
 
+use bxcan::{Fifo, Frame, Id, StandardId, filter::Mask32};
 use core::cell::RefCell;
 use cortex_m::interrupt::Mutex;
 #[cfg(not(test))]
 use panic_halt as _;
-use stm32f4xx_hal::{can::Can, pac, prelude::*, watchdog::IndependentWatchdog};
-use bxcan::{Fifo, Frame, Id, StandardId, filter::Mask32};
 use spacecan::{
     primitives::can_frame::{CanFrame, CanFrameError},
     protocol::SpaceCANProtocol,
     transport::base::Bus,
 };
-use systick_monotonic::{fugit::Duration, Systick};
+use stm32f4xx_hal::{can::Can, pac, prelude::*, watchdog::IndependentWatchdog};
+use systick_monotonic::{Systick, fugit::Duration};
 
 pub struct HardwareBus {
     can: Mutex<RefCell<bxcan::Can<Can<pac::CAN1>>>>,
@@ -37,7 +37,8 @@ impl Bus for HardwareBus {
         let frame = Frame::new_data(id, data);
         cortex_m::interrupt::free(|cs| {
             let mut can = self.can.borrow(cs).borrow_mut();
-            can.transmit(&frame).map_err(|_| CanFrameError::SendFailed)?;
+            can.transmit(&frame)
+                .map_err(|_| CanFrameError::SendFailed)?;
             Ok(())
         })
     }
@@ -52,7 +53,11 @@ impl Bus for HardwareBus {
                             Id::Standard(sid) => sid.as_raw() as u32,
                             Id::Extended(eid) => eid.as_raw(),
                         };
-                        CanFrame::new(id, Some(spacecan::FrameData::from_slice(data.as_ref()).unwrap())).ok()
+                        CanFrame::new(
+                            id,
+                            Some(spacecan::FrameData::from_slice(data.as_ref()).unwrap()),
+                        )
+                        .ok()
                     } else {
                         None
                     }
@@ -117,7 +122,11 @@ mod app {
 
         pet_watchdog::spawn().unwrap();
 
-        (Shared { protocol }, Local { watchdog }, init::Monotonics(mono))
+        (
+            Shared { protocol },
+            Local { watchdog },
+            init::Monotonics(mono),
+        )
     }
 
     #[task(binds = CAN1_RX0, shared = [protocol])]

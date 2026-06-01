@@ -37,12 +37,11 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; 2048];
         loop {
-            if let Ok((len, _addr)) = udp_sock_clone.recv_from(&mut buf).await {
-                if let Ok(frame) = serde_json::from_slice::<network::UdpCanFrame>(&buf[..len]) {
-                    if let Ok(json_str) = serde_json::to_string(&frame) {
-                        let _ = tx_clone.send(json_str);
-                    }
-                }
+            if let Ok((len, _addr)) = udp_sock_clone.recv_from(&mut buf).await
+                && let Ok(frame) = serde_json::from_slice::<network::UdpCanFrame>(&buf[..len])
+                && let Ok(json_str) = serde_json::to_string(&frame)
+            {
+                let _ = tx_clone.send(json_str);
             }
         }
     });

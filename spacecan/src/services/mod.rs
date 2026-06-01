@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 pub mod ST01_request_verification;
 pub mod ST03_housekeeping;
 pub mod ST08_function_management;

@@ -1,12 +1,21 @@
+#[cfg(feature = "std")]
 use crate::primitives::can_frame::{CanFrame, CanFrameError};
+#[cfg(feature = "std")]
 use crate::transport::base::Bus;
-use crate::FrameData;
+#[cfg(feature = "std")]
 use heapless::Deque;
 
 #[cfg(feature = "std")]
 pub struct MockBus {
     pub sent_frames: std::sync::Mutex<heapless::Vec<CanFrame, 32>>,
     pub receive_queue: std::sync::Mutex<Deque<CanFrame, 32>>,
+}
+
+#[cfg(feature = "std")]
+impl Default for MockBus {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(feature = "std")]

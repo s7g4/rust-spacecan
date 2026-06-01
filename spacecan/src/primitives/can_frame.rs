@@ -15,7 +15,7 @@ pub enum CanFrameError {
 
 impl CanFrame {
     pub fn new(id: u32, data: Option<FrameData>) -> Result<Self, CanFrameError> {
-        let frame_data = data.unwrap_or_else(|| FrameData::new());
+        let frame_data = data.unwrap_or_default();
         if frame_data.len() > 8 {
             return Err(CanFrameError::DataTooLong);
         }

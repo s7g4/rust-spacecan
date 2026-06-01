@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
             heartbeat_counter = heartbeat_counter.wrapping_add(1);
 
             // Every 5 seconds send SYNC frame and time frames
-            if sync_counter % 5 == 0 {
+            if sync_counter.is_multiple_of(5) {
                 let sync_frame = network::UdpCanFrame {
                     id: 0x080,
                     data: vec![],
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
                     "st01" => {
                         let mut service =
                             ST01_request_verification::RequestVerificationService::new();
-                        service.accept_telecommand(1, 0);
+                        let _ = service.accept_telecommand(1, 0);
                         let _ = sent_tx_clone
                             .send("ST01 service command executed".to_string())
                             .await;
@@ -136,7 +136,9 @@ async fn main() -> Result<()> {
                     }
                     "st20" => {
                         let service = ST20_parameter_management::ParameterManagementService::new();
-                        let _ = service.report_parameter_values(spacecan::ParamList::from_slice(&[1]).unwrap());
+                        let _ = service.report_parameter_values(
+                            spacecan::ParamList::from_slice(&[1]).unwrap(),
+                        );
                         let _ = sent_tx_clone
                             .send("ST20 service command executed".to_string())
                             .await;

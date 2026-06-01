@@ -1,8 +1,14 @@
+use crate::PacketData;
 use crate::primitives::packet::SpaceCANPacket;
 use crate::services::core::Service;
-use crate::PacketData;
 
 pub struct TestService {}
+
+impl Default for TestService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl TestService {
     pub fn new() -> Self {
@@ -17,7 +23,9 @@ impl TestService {
 }
 
 impl Service for TestService {
-    fn service_type(&self) -> u8 { 17 }
+    fn service_type(&self) -> u8 {
+        17
+    }
     fn handle_packet(&mut self, _packet: &SpaceCANPacket) -> Result<(), &'static str> {
         Ok(())
     }

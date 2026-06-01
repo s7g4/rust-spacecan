@@ -1,9 +1,9 @@
+use crate::FrameData;
+use crate::PacketData;
 use crate::primitives::can_frame::CanFrame;
 use crate::primitives::packet::SpaceCANPacket;
+use crate::services::core::ServiceManager;
 use crate::transport::base::Bus;
-use crate::services::core::{ServiceManager, Service};
-use crate::PacketData;
-use crate::FrameData;
 use heapless::FnvIndexMap;
 
 pub struct SpaceCANProtocol<B: Bus> {
@@ -51,6 +51,12 @@ pub struct PacketAssembler {
     partial_packets: FnvIndexMap<u16, PacketData, 16>,
 }
 
+impl Default for PacketAssembler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PacketAssembler {
     pub fn new() -> Self {
         PacketAssembler {
@@ -62,29 +68,35 @@ impl PacketAssembler {
         let id = frame.can_id();
         let source_id = ((id >> 8) & 0xFF) as u16;
         let data = frame.data();
-        if data.is_empty() { return None; }
+        if data.is_empty() {
+            return None;
+        }
 
         let sequence_flags = (data[0] >> 6) & 0x03;
-        
+
         match sequence_flags {
-            3 => { // Unsegmented
+            3 => {
+                // Unsegmented
                 let mut p_data = PacketData::new();
                 let _ = p_data.extend_from_slice(&data[1..]);
                 SpaceCANPacket::new(source_id, 0, p_data).ok()
             }
-            1 => { // First fragment
+            1 => {
+                // First fragment
                 let mut p_data = PacketData::new();
                 let _ = p_data.extend_from_slice(&data[1..]);
                 let _ = self.partial_packets.insert(source_id, p_data);
                 None
             }
-            0 => { // Continuation fragment
+            0 => {
+                // Continuation fragment
                 if let Some(p_data) = self.partial_packets.get_mut(&source_id) {
                     let _ = p_data.extend_from_slice(&data[1..]);
                 }
                 None
             }
-            2 => { // Last fragment
+            2 => {
+                // Last fragment
                 if let Some(mut p_data) = self.partial_packets.remove(&source_id) {
                     let _ = p_data.extend_from_slice(&data[1..]);
                     SpaceCANPacket::new(source_id, 0, p_data).ok()
@@ -96,10 +108,16 @@ impl PacketAssembler {
         }
     }
 
-    pub fn fragment_packet(&self, packet: &SpaceCANPacket, source_id: u16) -> Result<heapless::Vec<CanFrame, 128>, &'static str> {
+    pub fn fragment_packet(
+        &self,
+        packet: &SpaceCANPacket,
+        source_id: u16,
+    ) -> Result<heapless::Vec<CanFrame, 128>, &'static str> {
         let mut frames = heapless::Vec::new();
         let data = &packet.data;
-        if data.is_empty() { return Ok(frames); }
+        if data.is_empty() {
+            return Ok(frames);
+        }
 
         if data.len() <= 7 {
             let mut payload = FrameData::new();
@@ -126,7 +144,7 @@ impl PacketAssembler {
             let mut payload = FrameData::new();
             let _ = payload.push(sequence_flag << 6);
             let _ = payload.extend_from_slice(&data[offset..offset + chunk_size]);
-            
+
             let frame = CanFrame::new((source_id as u32) << 8, Some(payload)).unwrap();
             let _ = frames.push(frame);
             offset += chunk_size;

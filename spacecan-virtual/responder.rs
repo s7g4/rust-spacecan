@@ -60,11 +60,19 @@ async fn main() -> Result<()> {
                         }
                     }
                     _ => {
-                        let _ = function_management.perform_function(raw_id as u16, spacecan::PacketData::from_slice(&data).unwrap());
+                        let _ = function_management.perform_function(
+                            raw_id as u16,
+                            spacecan::PacketData::from_slice(&data).unwrap(),
+                        );
                         let _ =
                             request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
-                        let _ = parameter_management.report_parameter_values(spacecan::ParamList::from_slice(&[raw_id as u16]).unwrap());
-                        let _ = housekeeping.create_report(spacecan::ParamList::from_slice(&[raw_id as u16]).unwrap(), 0);
+                        let _ = parameter_management.report_parameter_values(
+                            spacecan::ParamList::from_slice(&[raw_id as u16]).unwrap(),
+                        );
+                        housekeeping.create_report(
+                            spacecan::ParamList::from_slice(&[raw_id as u16]).unwrap(),
+                            0,
+                        );
                         let _ = test_service.create_connection_test(raw_id as u32);
 
                         println!(

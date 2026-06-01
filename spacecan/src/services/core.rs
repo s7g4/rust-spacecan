@@ -1,9 +1,7 @@
 use crate::primitives::packet::SpaceCANPacket;
 use crate::services::{
-    ST01_request_verification::RequestVerificationService,
-    ST03_housekeeping::HousekeepingService,
-    ST08_function_management::FunctionManagementService,
-    ST17_test::TestService,
+    ST01_request_verification::RequestVerificationService, ST03_housekeeping::HousekeepingService,
+    ST08_function_management::FunctionManagementService, ST17_test::TestService,
     ST20_parameter_management::ParameterManagementService,
 };
 
@@ -18,6 +16,12 @@ pub struct ServiceManager {
     st08: FunctionManagementService,
     st17: TestService,
     st20: ParameterManagementService,
+}
+
+impl Default for ServiceManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ServiceManager {

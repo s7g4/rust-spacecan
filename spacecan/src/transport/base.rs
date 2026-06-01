@@ -1,4 +1,5 @@
 use crate::primitives::can_frame::CanFrame;
+#[cfg(feature = "std")]
 use heapless::Vec;
 
 pub trait Bus {
@@ -12,6 +13,13 @@ pub trait Bus {
 #[cfg(feature = "std")]
 pub struct BusImpl {
     buffer: std::sync::Mutex<Vec<CanFrame, 32>>,
+}
+
+#[cfg(feature = "std")]
+impl Default for BusImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(feature = "std")]
@@ -32,7 +40,11 @@ impl Bus for BusImpl {
     }
     fn get_frame(&self) -> Option<CanFrame> {
         let mut buf = self.buffer.lock().unwrap();
-        if buf.is_empty() { None } else { Some(buf.remove(0)) }
+        if buf.is_empty() {
+            None
+        } else {
+            Some(buf.remove(0))
+        }
     }
     fn start_receive(&self) {}
     fn stop_receive(&self) {}
