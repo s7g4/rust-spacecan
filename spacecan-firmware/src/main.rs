@@ -1,11 +1,8 @@
 #![no_std]
 #![no_main]
 
-extern crate alloc;
-
 use core::cell::RefCell;
 use cortex_m::interrupt::Mutex;
-use linked_list_allocator::LockedHeap;
 #[cfg(not(test))]
 use panic_halt as _;
 use stm32f4xx_hal::{can::Can, pac, prelude::*, watchdog::IndependentWatchdog};
@@ -16,10 +13,6 @@ use spacecan::{
     transport::base::Bus,
 };
 use systick_monotonic::{fugit::Duration, Systick};
-
-#[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
-const HEAP_SIZE: usize = 1024 * 32; // 32 KB
 
 pub struct HardwareBus {
     can: Mutex<RefCell<bxcan::Can<Can<pac::CAN1>>>>,
@@ -59,7 +52,7 @@ impl Bus for HardwareBus {
                             Id::Standard(sid) => sid.as_raw() as u32,
                             Id::Extended(eid) => eid.as_raw(),
                         };
-                        CanFrame::new(id, Some(data.to_vec())).ok()
+                        CanFrame::new(id, Some(spacecan::FrameData::from_slice(data.as_ref()).unwrap())).ok()
                     } else {
                         None
                     }
@@ -89,13 +82,6 @@ mod app {
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        unsafe {
-            static mut HEAP: [core::mem::MaybeUninit<u8>; HEAP_SIZE] =
-                [core::mem::MaybeUninit::uninit(); HEAP_SIZE];
-            let heap_ptr = core::ptr::addr_of_mut!(HEAP) as *mut u8;
-            ALLOCATOR.lock().init(heap_ptr, HEAP_SIZE);
-        }
-
         let dp = cx.device;
         let rcc = dp.RCC.constrain();
         let _clocks = rcc

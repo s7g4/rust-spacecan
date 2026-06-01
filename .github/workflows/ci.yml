@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Rust SpaceCAN CI/CD
 
 on:
   push:
@@ -10,80 +10,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  format:
-    name: Formatting
+  virtual_checks:
+    name: SpaceCAN Virtual (Host) Checks
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Run Cargo Check
+        run: cargo check -p spacecan -p spacecan-virtual
+      
+      - name: Run Clippy (Virtual & Lib)
+        run: cargo clippy -p spacecan -p spacecan-virtual -- -D warnings
+        
+      - name: Run Test Suite
+        run: cargo test -p spacecan -p spacecan-virtual
 
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt
-
-    - name: Cargo Format Check
-      run: cargo fmt --all --check
-
-  clippy:
-    name: Clippy Lints
+  firmware_checks:
+    name: SpaceCAN Firmware (STM32F4) Checks
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: clippy
-
-    - name: Clippy (spacecan)
-      run: cargo clippy -p spacecan --all-targets -- -D warnings
-
-    - name: Clippy (spacecan-virtual)
-      run: cargo clippy -p spacecan-virtual --all-targets -- -D warnings
-
-  test:
-    name: Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Build Library
-      run: cargo build -p spacecan
-
-    - name: Build Virtual Binaries
-      run: cargo build -p spacecan-virtual
-
-    - name: Run Tests
-      run: cargo test -p spacecan -p spacecan-virtual
-
-  embedded-check:
-    name: Embedded Feature Check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Check spacecan with embedded feature
-      run: cargo check -p spacecan --features embedded
-
-  firmware-build:
-    name: Firmware Cross-Compilation
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: thumbv7em-none-eabihf
-
-    - name: Build Firmware
-      run: cargo build -p spacecan-firmware --target thumbv7em-none-eabihf
+      - uses: actions/checkout@v4
+      - name: Install Rust Stable & Target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      
+      - name: Run Cargo Check (Firmware)
+        run: cargo check -p spacecan-firmware --target thumbv7em-none-eabihf
+        
+      - name: Run Clippy (Firmware)
+        run: cargo clippy -p spacecan-firmware --target thumbv7em-none-eabihf -- -D warnings

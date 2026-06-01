@@ -115,14 +115,14 @@ async fn main() -> Result<()> {
                     "st08" => {
                         let mut service =
                             ST08_function_management::FunctionManagementService::new();
-                        let _ = service.perform_function(1, vec![]);
+                        let _ = service.perform_function(1, spacecan::PacketData::new());
                         let _ = sent_tx_clone
                             .send("ST08 service command executed".to_string())
                             .await;
                     }
                     "st03" => {
                         let mut service = ST03_housekeeping::HousekeepingService::new();
-                        service.create_report(vec![1], 0u32);
+                        service.create_report(spacecan::ParamList::from_slice(&[1]).unwrap(), 0u32);
                         let _ = sent_tx_clone
                             .send("ST03 service command executed".to_string())
                             .await;
@@ -136,7 +136,7 @@ async fn main() -> Result<()> {
                     }
                     "st20" => {
                         let service = ST20_parameter_management::ParameterManagementService::new();
-                        let _ = service.report_parameter_values(vec![1]);
+                        let _ = service.report_parameter_values(spacecan::ParamList::from_slice(&[1]).unwrap());
                         let _ = sent_tx_clone
                             .send("ST20 service command executed".to_string())
                             .await;

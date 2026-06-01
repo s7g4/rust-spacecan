@@ -1,98 +1,42 @@
-use crate::primitives::can_frame::{CanFrame, CanFrameError};
-extern crate alloc;
+use crate::primitives::can_frame::CanFrame;
+use heapless::Vec;
 
-#[cfg(not(feature = "embedded"))]
-extern crate std;
-
-use alloc::vec::Vec;
-#[cfg(feature = "embedded")]
-use core::cell::RefCell;
-use core::option::Option;
-use core::option::Option::{None, Some};
-use core::result::Result;
-use core::result::Result::{Err, Ok};
-#[cfg(feature = "embedded")]
-use cortex_m::interrupt::{Mutex, free as interrupt_free};
-
-#[cfg(not(feature = "embedded"))]
-use std::sync::Mutex;
-
-// Define a trait for Bus operations
 pub trait Bus {
-    fn flush_frame_buffer(&self);
+    fn send(&self, frame: &CanFrame) -> Result<(), crate::primitives::can_frame::CanFrameError>;
+    fn get_frame(&self) -> Option<CanFrame>;
     fn start_receive(&self);
     fn stop_receive(&self);
-    fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError>;
-    fn get_frame(&self) -> Option<CanFrame>;
+    fn flush_frame_buffer(&self);
 }
 
-// Basic Bus implementation using platform-specific Mutex
+#[cfg(feature = "std")]
 pub struct BusImpl {
-    #[cfg(feature = "embedded")]
-    buffer: cortex_m::interrupt::Mutex<core::cell::RefCell<Vec<CanFrame>>>,
-    #[cfg(not(feature = "embedded"))]
-    buffer: std::sync::Mutex<Vec<CanFrame>>,
+    buffer: std::sync::Mutex<Vec<CanFrame, 32>>,
 }
 
+#[cfg(feature = "std")]
 impl BusImpl {
     pub fn new() -> Self {
         BusImpl {
-            #[cfg(feature = "embedded")]
-            buffer: cortex_m::interrupt::Mutex::new(core::cell::RefCell::new(Vec::new())),
-            #[cfg(not(feature = "embedded"))]
             buffer: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
 
+#[cfg(feature = "std")]
 impl Bus for BusImpl {
-    fn flush_frame_buffer(&self) {
-        #[cfg(feature = "embedded")]
-        {
-            interrupt_free(|cs| {
-                self.buffer.borrow(cs).borrow_mut().clear();
-            });
-        }
-        #[cfg(not(feature = "embedded"))]
-        {
-            if let Ok(mut guard) = self.buffer.lock() {
-                guard.clear();
-            }
-        }
-    }
-
-    fn start_receive(&self) {}
-
-    fn stop_receive(&self) {}
-
-    fn send(&self, can_frame: &CanFrame) -> Result<(), CanFrameError> {
-        #[cfg(feature = "embedded")]
-        {
-            interrupt_free(|cs| {
-                self.buffer.borrow(cs).borrow_mut().push(can_frame.clone());
-            });
-        }
-        #[cfg(not(feature = "embedded"))]
-        {
-            if let Ok(mut guard) = self.buffer.lock() {
-                guard.push(can_frame.clone());
-            }
-        }
+    fn send(&self, frame: &CanFrame) -> Result<(), crate::primitives::can_frame::CanFrameError> {
+        let mut buf = self.buffer.lock().unwrap();
+        let _ = buf.push(frame.clone());
         Ok(())
     }
-
     fn get_frame(&self) -> Option<CanFrame> {
-        #[cfg(feature = "embedded")]
-        {
-            interrupt_free(|cs| self.buffer.borrow(cs).borrow_mut().pop())
-        }
-        #[cfg(not(feature = "embedded"))]
-        {
-            if let Ok(mut guard) = self.buffer.lock() {
-                guard.pop()
-            } else {
-                None
-            }
-        }
+        let mut buf = self.buffer.lock().unwrap();
+        if buf.is_empty() { None } else { Some(buf.remove(0)) }
+    }
+    fn start_receive(&self) {}
+    fn stop_receive(&self) {}
+    fn flush_frame_buffer(&self) {
+        self.buffer.lock().unwrap().clear();
     }
 }

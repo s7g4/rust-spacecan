@@ -1,233 +1,137 @@
-extern crate alloc;
-
-use crate::primitives::can_frame::{CanFrame, CanFrameError};
-use crate::primitives::packet::{Packet, PacketAssembler};
+use crate::primitives::can_frame::CanFrame;
+use crate::primitives::packet::SpaceCANPacket;
 use crate::transport::base::Bus;
-use alloc::vec::Vec;
-use core::fmt;
+use crate::services::core::{ServiceManager, Service};
+use crate::PacketData;
+use crate::FrameData;
+use heapless::FnvIndexMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpaceCANError {
-    InvalidFrame,
-    TransportError,
-    PacketAssemblyError,
-    InvalidData,
-    BufferFull,
+pub struct SpaceCANProtocol<B: Bus> {
+    bus: B,
+    node_id: u16,
+    assembler: PacketAssembler,
+    pub service_manager: ServiceManager,
 }
 
-impl fmt::Display for SpaceCANError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SpaceCANError::InvalidFrame => write!(f, "Invalid SpaceCAN frame"),
-            SpaceCANError::TransportError => write!(f, "Transport layer error"),
-            SpaceCANError::PacketAssemblyError => write!(f, "Packet assembly error"),
-            SpaceCANError::InvalidData => write!(f, "Invalid data"),
-            SpaceCANError::BufferFull => write!(f, "Buffer full"),
-        }
-    }
-}
-
-/// Represents a SpaceCAN frame with protocol-specific fields
-#[cfg(all(feature = "defmt", not(test)))]
-use defmt::{Format, Formatter};
-
-#[derive(Debug, Clone)]
-pub struct SpaceCANFrame {
-    pub can_id: u32,
-    pub service_type: u8,
-    pub subservice_type: u8,
-    pub node_id: u32,
-    pub data: Vec<u8>,
-}
-
-#[cfg(all(feature = "defmt", not(test)))]
-impl Format for SpaceCANFrame {
-    fn format(&self, fmt: Formatter) {
-        defmt::write!(
-            fmt,
-            "SpaceCANFrame {{ can_id: {}, service_type: {}, subservice_type: {}, node_id: {}, data: [",
-            self.can_id,
-            self.service_type,
-            self.subservice_type,
-            self.node_id
-        );
-        for byte in &self.data {
-            defmt::write!(fmt, "{}, ", byte);
-        }
-        defmt::write!(fmt, "] }}");
-    }
-}
-
-impl SpaceCANFrame {
-    pub fn new(
-        can_id: u32,
-        service_type: u8,
-        subservice_type: u8,
-        node_id: u32,
-        data: Vec<u8>,
-    ) -> Result<Self, SpaceCANError> {
-        if can_id > crate::constants::CAN_ID_MASK {
-            return Err(SpaceCANError::InvalidFrame);
-        }
-
-        if node_id > crate::constants::NODE_ID_MASK {
-            return Err(SpaceCANError::InvalidFrame);
-        }
-
-        Ok(SpaceCANFrame {
-            can_id,
-            service_type,
-            subservice_type,
-            node_id,
-            data,
-        })
-    }
-
-    /// Creates a SpaceCAN frame from a CAN frame
-    pub fn from_can_frame(can_frame: CanFrame) -> Result<Self, SpaceCANError> {
-        let data = can_frame.data();
-        if data.len() < 2 {
-            return Err(SpaceCANError::InvalidFrame);
-        }
-
-        let service_type = data[0];
-        let subservice_type = data[1];
-        let payload = data[2..].to_vec();
-        let node_id = can_frame.get_node_id();
-
-        Ok(SpaceCANFrame {
-            can_id: can_frame.can_id(),
-            service_type,
-            subservice_type,
-            node_id,
-            data: payload,
-        })
-    }
-
-    pub fn to_can_frame(&self) -> Result<CanFrame, SpaceCANError> {
-        let mut frame_data = Vec::with_capacity(2 + self.data.len());
-        frame_data.push(self.service_type);
-        frame_data.push(self.subservice_type);
-        frame_data.extend_from_slice(&self.data);
-
-        CanFrame::new(self.can_id, Some(frame_data)).map_err(|_| SpaceCANError::InvalidFrame)
-    }
-
-    pub fn get_function_id(&self) -> u32 {
-        (self.can_id & crate::constants::FUNCTION_ID_MASK) >> 7
-    }
-}
-
-/// Main SpaceCAN protocol handler
-pub struct SpaceCANProtocol<T: Bus> {
-    transport: T,
-    packet_assembler: PacketAssembler,
-    node_id: u32,
-}
-
-impl<T: Bus> SpaceCANProtocol<T> {
-    pub fn new(transport: T, node_id: u32) -> Self {
+impl<B: Bus> SpaceCANProtocol<B> {
+    pub fn new(bus: B, node_id: u16) -> Self {
         SpaceCANProtocol {
-            transport,
-            packet_assembler: PacketAssembler::new(),
+            bus,
             node_id,
+            assembler: PacketAssembler::new(),
+            service_manager: ServiceManager::new(),
         }
     }
 
-    pub fn send_frame(&self, frame: &SpaceCANFrame) -> Result<(), SpaceCANError> {
-        let can_frame = frame.to_can_frame()?;
-        self.transport
-            .send(&can_frame)
-            .map_err(|_| SpaceCANError::TransportError)
+    pub fn send_frame(&self, frame: &CanFrame) -> Result<(), &'static str> {
+        self.bus.send(frame).map_err(|_| "Failed to send frame")
     }
 
-    /// Send a large packet by fragmenting it across multiple CAN frames.
-    /// The real service/subservice bytes are prepended to the payload so they
-    /// survive reassembly on the receiving end. Each fragment is transmitted
-    /// with `ST_FRAGMENTED` as the on-wire service type.
-    pub fn send_packet(
-        &self,
-        service_type: u8,
-        subservice_type: u8,
-        target_node: u32,
-        data: Vec<u8>,
-    ) -> Result<(), SpaceCANError> {
-        let mut payload = Vec::with_capacity(2 + data.len());
-        payload.push(service_type);
-        payload.push(subservice_type);
-        payload.extend_from_slice(&data);
+    pub fn receive_frame(&mut self) -> Result<Option<CanFrame>, &'static str> {
+        if let Some(frame) = self.bus.get_frame() {
+            if let Some(packet) = self.assembler.process_frame(&frame) {
+                let _ = self.service_manager.route_packet(&packet);
+            }
+            Ok(Some(frame))
+        } else {
+            Ok(None)
+        }
+    }
 
-        let packet = Packet::new(Some(payload));
-        let fragments = packet.split();
-
-        for fragment in fragments {
-            let can_id = crate::constants::ID_TC | target_node;
-            let frame = SpaceCANFrame::new(
-                can_id,
-                crate::constants::ST_FRAGMENTED,
-                0x00,
-                self.node_id,
-                fragment,
-            )?;
+    pub fn send_packet(&self, packet: &SpaceCANPacket) -> Result<(), &'static str> {
+        let frames = self.assembler.fragment_packet(packet, self.node_id)?;
+        for frame in frames {
             self.send_frame(&frame)?;
         }
-
         Ok(())
     }
+}
 
-    /// Receive and process a CAN frame.
-    /// Frames tagged with `ST_FRAGMENTED` are routed to the packet assembler;
-    /// all other frames are returned directly as single-frame messages.
-    pub fn receive_frame(&mut self) -> Result<Option<SpaceCANFrame>, SpaceCANError> {
-        let can_frame = match self.transport.get_frame() {
-            Some(f) => f,
-            None => return Ok(None),
-        };
+pub struct PacketAssembler {
+    partial_packets: FnvIndexMap<u16, PacketData, 16>,
+}
 
-        let frame = SpaceCANFrame::from_can_frame(can_frame)?;
-
-        if frame.service_type != crate::constants::ST_FRAGMENTED {
-            return Ok(Some(frame));
+impl PacketAssembler {
+    pub fn new() -> Self {
+        PacketAssembler {
+            partial_packets: FnvIndexMap::new(),
         }
+    }
 
-        // Fragmented path: feed the frame to the assembler.
-        if let Some(packet) = self.packet_assembler.process_fragment(&frame) {
-            let reassembled = packet.data();
-            if reassembled.len() < 2 {
-                return Err(SpaceCANError::PacketAssemblyError);
+    pub fn process_frame(&mut self, frame: &CanFrame) -> Option<SpaceCANPacket> {
+        let id = frame.can_id();
+        let source_id = ((id >> 8) & 0xFF) as u16;
+        let data = frame.data();
+        if data.is_empty() { return None; }
+
+        let sequence_flags = (data[0] >> 6) & 0x03;
+        
+        match sequence_flags {
+            3 => { // Unsegmented
+                let mut p_data = PacketData::new();
+                let _ = p_data.extend_from_slice(&data[1..]);
+                SpaceCANPacket::new(source_id, 0, p_data).ok()
             }
+            1 => { // First fragment
+                let mut p_data = PacketData::new();
+                let _ = p_data.extend_from_slice(&data[1..]);
+                let _ = self.partial_packets.insert(source_id, p_data);
+                None
+            }
+            0 => { // Continuation fragment
+                if let Some(p_data) = self.partial_packets.get_mut(&source_id) {
+                    let _ = p_data.extend_from_slice(&data[1..]);
+                }
+                None
+            }
+            2 => { // Last fragment
+                if let Some(mut p_data) = self.partial_packets.remove(&source_id) {
+                    let _ = p_data.extend_from_slice(&data[1..]);
+                    SpaceCANPacket::new(source_id, 0, p_data).ok()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 
-            let service_type = reassembled[0];
-            let subservice_type = reassembled[1];
-            let payload = reassembled[2..].to_vec();
+    pub fn fragment_packet(&self, packet: &SpaceCANPacket, source_id: u16) -> Result<heapless::Vec<CanFrame, 128>, &'static str> {
+        let mut frames = heapless::Vec::new();
+        let data = &packet.data;
+        if data.is_empty() { return Ok(frames); }
 
-            let result = SpaceCANFrame::new(
-                frame.can_id,
-                service_type,
-                subservice_type,
-                frame.node_id,
-                payload,
-            )?;
-            return Ok(Some(result));
+        if data.len() <= 7 {
+            let mut payload = FrameData::new();
+            let _ = payload.push(3 << 6);
+            let _ = payload.extend_from_slice(data);
+            let frame = CanFrame::new((source_id as u32) << 8, Some(payload)).unwrap();
+            let _ = frames.push(frame);
+            return Ok(frames);
         }
 
-        // Fragment buffered, packet not yet complete.
-        Ok(None)
-    }
+        let mut offset = 0;
+        let total_len = data.len();
 
-    pub fn node_id(&self) -> u32 {
-        self.node_id
-    }
+        while offset < total_len {
+            let chunk_size = core::cmp::min(7, total_len - offset);
+            let sequence_flag = if offset == 0 {
+                1 // First
+            } else if offset + chunk_size >= total_len {
+                2 // Last
+            } else {
+                0 // Continuation
+            };
 
-    pub fn start_receive(&self) {
-        self.transport.start_receive();
-    }
+            let mut payload = FrameData::new();
+            let _ = payload.push(sequence_flag << 6);
+            let _ = payload.extend_from_slice(&data[offset..offset + chunk_size]);
+            
+            let frame = CanFrame::new((source_id as u32) << 8, Some(payload)).unwrap();
+            let _ = frames.push(frame);
+            offset += chunk_size;
+        }
 
-    pub fn stop_receive(&self) {
-        self.transport.stop_receive();
-    }
-
-    pub fn flush_buffer(&self) {
-        self.transport.flush_frame_buffer();
+        Ok(frames)
     }
 }
