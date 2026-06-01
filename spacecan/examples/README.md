@@ -1,45 +1,43 @@
-# 🚀 SpaceCAN Examples
+# SpaceCAN Examples
 
-This directory contains **example scripts** demonstrating how to use the SpaceCAN protocol in Rust.
+Usage examples for the SpaceCAN protocol library.
 
----
+## Structure
 
-## 📌 **Structure**
 ```
 examples/
-│-- README.md
-│-- basic/               # Simple SpaceCAN usage examples
-│   ├── send_can.rs      # Example: Sending a CAN frame
-│   ├── receive_can.rs   # Example: Receiving a CAN frame
-│   ├── sync_example.rs  # Example: Synchronization message handling
-│   ├── heartbeat.rs     # Example: Heartbeat monitoring
-│-- packet/              # Packet fragmentation & reassembly examples
-│   ├── split_packet.rs   # Example: Splitting large packets into CAN frames
-│   ├── reassemble_packet.rs # Example: Reassembling packets from received frames
-│   ├── full_packet_demo.rs  # Example: End-to-end packet transmission and reception
-│-- services/
-│   ├── packet_service.rs   # Example: A Service for Handling Packets
-│   ├── service_full_demo.rs # Example: Full Service Demo for Packet Transmission & Reception
-│   ├── service_splitter.rs  # Example: Service for Splitting Large Packets
-
+├── basic/
+│   ├── send_can.rs             # Construct and send a CAN frame
+│   ├── recieve_can.rs          # Receive and decode a CAN frame
+│   ├── sync_example.rs         # Synchronization message handling
+│   └── heartbeat_example.rs    # Heartbeat monitoring loop
+├── packet/
+│   ├── split_packet.rs         # Fragment a large payload into CAN frames
+│   ├── reassemble_packet.rs    # Reassemble fragments into a complete packet
+│   └── full_packet_demo.rs     # End-to-end fragmentation and reassembly
+├── services/
+│   ├── packet_service.rs       # Service handler for packet processing
+│   ├── service_full_demo.rs    # Full PUS service routing demonstration
+│   └── service_splitter.rs     # Service-level packet splitting
+└── vcan.sh                     # Script to set up a virtual CAN interface
 ```
 
----
+## Running an Example
 
-## 🚀 **How to Run the Examples**
+```bash
+cargo run -p spacecan --example split_packet
+```
 
-### **🔹 Prerequisites**
-Ensure you have:
-- Rust installed (`rustc --version` to check)
-- A CAN interface (or a software CAN simulator)
-- Built the SpaceCAN library:
-  ```sh
-  cargo build --release
+Replace `split_packet` with the name of any example file (without the `.rs` extension).
+
+## Prerequisites
+
+- Rust stable toolchain
+- The `spacecan` library compiled with `std` feature for host execution:
+  ```bash
+  cargo build -p spacecan --features std
   ```
 
-### **🔹 Running an Example**
-To run an example, use:
-```sh
-cargo run --example split_packet
-```
-Replace `split_packet` with the desired example.
+## License
+
+MIT License

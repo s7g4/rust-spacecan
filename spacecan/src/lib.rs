@@ -22,6 +22,7 @@ pub mod services;
 #[cfg(test)]
 mod tests {
     pub mod integration_test;
+    pub mod packet_test;
 }
 
 #[cfg(all(feature = "defmt", not(target_os = "none")))]
@@ -61,7 +62,8 @@ pub mod constants {
     pub const ST20_PARAMETER_MANAGEMENT: u8 = 20;
 
     pub const MAX_CAN_DATA_LENGTH: usize = 8;
-    pub const MAX_PACKET_DATA_LENGTH: usize = 6; // 2 bytes for fragmentation header
+    pub const ST_FRAGMENTED: u8 = 0xFF;
+    pub const MAX_PACKET_DATA_LENGTH: usize = 4; // 2 bytes for fragmentation header
     pub const CAN_ID_MASK: u32 = 0x7FF;
     pub const NODE_ID_MASK: u32 = 0x07F;
     pub const FUNCTION_ID_MASK: u32 = 0x780;

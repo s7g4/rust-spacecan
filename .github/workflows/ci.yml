@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  format-and-lint:
-    name: Code Quality (Format & Clippy)
+  format:
+    name: Formatting
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -19,16 +19,30 @@ jobs:
     - name: Set up Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        components: clippy, rustfmt
+        components: rustfmt
 
     - name: Cargo Format Check
       run: cargo fmt --all --check
 
-    - name: Cargo Clippy Workspace
-      run: cargo clippy --workspace --all-targets -- -D warnings
+  clippy:
+    name: Clippy Lints
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
 
-  host-build-and-test:
-    name: Host Verification (Linux & Windows)
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+
+    - name: Clippy (spacecan)
+      run: cargo clippy -p spacecan --all-targets -- -D warnings
+
+    - name: Clippy (spacecan-virtual)
+      run: cargo clippy -p spacecan-virtual --all-targets -- -D warnings
+
+  test:
+    name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -39,17 +53,29 @@ jobs:
     - name: Set up Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cargo Check Workspace
-      run: cargo check --workspace
+    - name: Build Library
+      run: cargo build -p spacecan
 
-    - name: Cargo Test Workspace
-      run: cargo test --workspace
+    - name: Build Virtual Binaries
+      run: cargo build -p spacecan-virtual
 
-    - name: Cargo Check Embedded Features
-      run: cargo check --workspace --features embedded
+    - name: Run Tests
+      run: cargo test -p spacecan -p spacecan-virtual
 
-  embedded-target-compilation:
-    name: Bare-Metal Target Compilation
+  embedded-check:
+    name: Embedded Feature Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Check spacecan with embedded feature
+      run: cargo check -p spacecan --features embedded
+
+  firmware-build:
+    name: Firmware Cross-Compilation
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -57,7 +83,7 @@ jobs:
     - name: Set up Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        targets: thumbv7em-none-eabihf
+        targets: thumbv6m-none-eabi
 
-    - name: Build Bare-Metal Firmware Crate
-      run: cargo build -p spacecan-firmware --target thumbv7em-none-eabihf
+    - name: Build Firmware
+      run: cargo build -p spacecan-firmware --target thumbv6m-none-eabi

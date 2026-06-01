@@ -1,18 +1,18 @@
 # spacecan-virtual
 
-## Overview
-`spacecan-virtual` is a virtual implementation of the SpaceCAN protocol stack designed for desktop environments. It uses async features and tokio runtime for asynchronous operations.
+Host-side simulation of the SpaceCAN protocol stack using tokio async runtime.
+
+## Binaries
+
+- **controller** — Sends telecommand frames and fragmented packets to the responder node.
+- **responder** — Listens for incoming frames, routes them through the PUS service manager, and returns telemetry responses.
 
 ## Prerequisites
-- Rust toolchain installed (preferably nightly for latest features)
-- Cargo package manager
-- Virtual CAN interface (e.g., `vcan0`) set up on your system for testing CAN frames
 
-## Setting up Virtual CAN Interface
+- Stable Rust toolchain
+- Linux: optional SocketCAN interface (`vcan0`) for raw CAN transport
 
-Before running the virtual CAN programs, you need to set up the virtual CAN interface on your Linux system.
-
-Run the following commands with root privileges:
+### Setting Up Virtual CAN (Linux Only)
 
 ```bash
 sudo modprobe vcan
@@ -20,44 +20,31 @@ sudo ip link add dev vcan0 type vcan
 sudo ip link set up vcan0
 ```
 
-These commands load the virtual CAN kernel module and create and activate the `vcan0` interface.
-
 ## Building
 
-To build the `spacecan-virtual` package with async features enabled, run:
+From the workspace root:
 
 ```bash
-cargo build --release --features async --manifest-path=rust-spacecan/spacecan-virtual/Cargo.toml
+cargo build -p spacecan-virtual
 ```
 
 ## Running
 
-After building, you can run the example responder or controller binaries:
+Open two terminals:
 
 ```bash
-cargo run --release --features async --bin responder --manifest-path=rust-spacecan/spacecan-virtual/Cargo.toml
+cargo run -p spacecan-virtual --bin controller
 ```
 
 ```bash
-cargo run --release --features async --bin controller --manifest-path=rust-spacecan/spacecan-virtual/Cargo.toml
+cargo run -p spacecan-virtual --bin responder
 ```
 
-Make sure your virtual CAN interface (e.g., `vcan0`) is up and running before starting these programs.
+## Features
 
-## Testing
-
-You can test the virtual CAN communication by running both responder and controller simultaneously in separate terminals.
-
-## Notes
-
-- The async feature gates tokio and tokio-stream dependencies.
-- The virtual CAN interface is required for proper operation.
-- Logs and debug information will be printed to the console.
-
-## Troubleshooting
-
-- If you encounter build errors related to features, ensure you have enabled the `async` feature.
-- For CAN interface issues, verify the virtual CAN device is created and active using the commands above.
+| Feature | Default | Description                          |
+|---------|---------|--------------------------------------|
+| `async` | yes     | Enables tokio and tokio-stream deps  |
 
 ## License
 

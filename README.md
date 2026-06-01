@@ -2,100 +2,113 @@
 
 ## Overview
 
-SpaceCAN is a Rust workspace project implementing a CAN (Controller Area Network) protocol stack and firmware for embedded systems. It consists of three main crates:
+SpaceCAN is a Rust workspace implementing a CAN (Controller Area Network) protocol stack for embedded spacecraft systems. It provides CAN frame encoding/decoding, ECSS PUS service routing, multi-frame packet fragmentation, and a virtual simulation harness.
 
-- `spacecan`: A no_std Rust library providing CAN frame encoding, decoding, and protocol services.
-- `spacecan-firmware`: Minimal firmware targeting STM32F4 hardware.
-- `spacecan-virtual`: Virtual implementation of SpaceCAN for testing and simulation on host systems.
+The workspace contains three crates:
+
+- **spacecan** — `no_std` core library with CAN primitives, protocol handling, and PUS services.
+- **spacecan-firmware** — Bare-metal firmware targeting STM32G071 (Cortex-M0+).
+- **spacecan-virtual** — Tokio-based simulation binaries for host-side protocol testing.
 
 ## Project Structure
 
 ```
 rust-spacecan/
-├── spacecan/                # Core CAN protocol library
+├── spacecan/                   # Core protocol library (no_std)
 │   ├── src/
-│   │   ├── primitives/      # Data models and base components
-│   │   ├── services/        # ECSS PUS services implementation
-│   │   ├── transport/       # Hardware abstraction and bus traits
-│   │   ├── tests/           # Protocol test suite
-│   ├── Cargo.toml
-├── spacecan-firmware/       # Embedded target implementation
+│   │   ├── primitives/         # CanFrame, Packet, Heartbeat, Sync, Timer
+│   │   ├── services/           # ECSS PUS service handlers (ST01–ST20)
+│   │   ├── transport/          # Bus trait, BusImpl, FrameBuffer, MockTransport
+│   │   ├── tests/              # Unit and integration tests
+│   │   ├── protocol.rs         # SpaceCANFrame, SpaceCANProtocol
+│   │   └── lib.rs              # Crate root and constants
+│   ├── examples/               # Usage examples (basic, packet, services)
+│   └── Cargo.toml
+├── spacecan-firmware/          # Bare-metal firmware crate
 │   ├── src/
-│   │   ├── main.rs          # Firmware entry point
-│   ├── memory.x             # Linker memory configuration
-│   ├── Cargo.toml
-├── spacecan-virtual/        # Desktop simulation binaries
-│   ├── src/
-│   │   ├── controller.rs    # Virtual node controller
-│   │   ├── responder.rs     # Virtual node responder
-│   ├── Cargo.toml
-├── Cargo.toml               # Workspace configuration
+│   │   ├── main.rs             # Cortex-M entry point
+│   │   └── lib.rs
+│   ├── build.rs                # Copies memory.x to linker search path
+│   ├── memory.x                # STM32G071RB linker memory layout
+│   └── Cargo.toml
+├── spacecan-virtual/           # Host simulation binaries
+│   ├── controller.rs           # Virtual CAN controller node
+│   ├── responder.rs            # Virtual CAN responder node
+│   ├── src/main.rs
+│   └── Cargo.toml
+├── .github/workflows/ci.yml   # CI/CD pipeline
+├── Cargo.toml                  # Workspace root
 └── README.md
 ```
 
-## Building the Project
+## Building
 
-Ensure you have Rust installed with the appropriate target for embedded ARM Cortex-M:
-
-```bash
-rustup target add thumbv7em-none-eabihf
-```
-
-### Build the entire workspace
-
-From the root directory:
+### Prerequisites
 
 ```bash
-cargo build --release
+# Stable Rust toolchain
+rustup toolchain install stable
+
+# ARM target for firmware cross-compilation
+rustup target add thumbv6m-none-eabi
 ```
 
-### Build individual crates
+### Library and Simulation Binaries
 
-- Build `spacecan` library:
 ```bash
-cargo build --release -p spacecan
+cargo build -p spacecan
+cargo build -p spacecan-virtual
 ```
 
-- Build `spacecan-firmware` firmware:
+### Firmware (Cross-Compilation)
+
 ```bash
-cargo build --release -p spacecan-firmware
+cargo build -p spacecan-firmware --target thumbv6m-none-eabi
 ```
 
-- Build `spacecan-virtual` virtual implementation:
-```bash
-cargo build --release -p spacecan-virtual
-```
+## Running
 
-## Running the Implementations
+### Virtual Simulation
 
-### Virtual Implementation (Host System)
+Open two terminals and run:
 
 ```bash
 cargo run -p spacecan-virtual --bin controller
+```
+
+```bash
 cargo run -p spacecan-virtual --bin responder
 ```
 
-Or using the Cargo aliases:
+### Firmware
+
+Flash the compiled binary to an STM32G071 target via probe-rs, OpenOCD, or ST-Link.
+
+## Testing
+
 ```bash
-cargo run-virtual
+cargo test -p spacecan
 ```
 
-### Firmware Implementation (Target Hardware)
+## Features
 
-```bash
-cargo run -p spacecan-firmware
-```
+The `spacecan` library supports the following feature flags:
 
-Or using the Cargo alias:
-```bash
-cargo run-firmware
-```
+| Feature    | Description                                       |
+|------------|---------------------------------------------------|
+| `std`      | Enables tokio, serde_json, anyhow for host builds |
+| `embedded` | Enables cortex-m, cortex-m-rt, embedded-hal, nb   |
+| `defmt`    | Enables defmt structured logging                  |
 
-## Dependencies and Target Information
+## CI/CD
 
-- `spacecan` is a `no_std` crate by default, with an optional `std` feature for examples and testing.
-- The `spacecan-firmware` crate depends on hardware abstraction layers for STM32F4 (`stm32f4xx-hal`) and targets the Cortex-M4 architecture (`thumbv7em-none-eabihf`).
-- `spacecan-virtual` depends on `tokio` for host-side simulation and execution.
+The GitHub Actions pipeline runs on every push and pull request to `main`:
+
+- **Formatting** — `cargo fmt --all --check`
+- **Clippy** — Per-package lint checks with `-D warnings`
+- **Tests** — `spacecan` and `spacecan-virtual` on Ubuntu and Windows
+- **Embedded Check** — `cargo check -p spacecan --features embedded`
+- **Firmware Build** — Cross-compilation to `thumbv6m-none-eabi`
 
 ## License
 

@@ -1,11 +1,10 @@
 extern crate alloc;
 
-use super::can_frame::{CanFrame, CanFrameError};
+use crate::protocol::SpaceCANFrame;
 use alloc::collections::BTreeMap;
-use alloc::vec;
 use alloc::vec::Vec;
 
-const MAX_DATA_LENGTH: usize = 6;
+const MAX_DATA_LENGTH: usize = 4;
 
 #[derive(Debug)]
 pub struct Packet {
@@ -28,7 +27,7 @@ impl Packet {
 
         for (i, chunk) in self.data.chunks(MAX_DATA_LENGTH).enumerate() {
             let mut frame = Vec::with_capacity(2 + chunk.len());
-            frame.push((total_frames - 1) as u8); // Total frames
+            frame.push((total_frames - 1) as u8); // Remaining frame count
             frame.push(i as u8); // Frame index
             frame.extend_from_slice(chunk);
             frames.push(frame);
@@ -38,7 +37,7 @@ impl Packet {
 }
 
 pub struct PacketAssembler {
-    buffer: BTreeMap<u32, BTreeMap<u8, Vec<u8>>>, // Maps can_id to a map of frame index to data
+    buffer: BTreeMap<u32, BTreeMap<u8, Vec<u8>>>,
 }
 
 impl PacketAssembler {
@@ -48,27 +47,35 @@ impl PacketAssembler {
         }
     }
 
-    pub fn process_frame(&mut self, can_frame: CanFrame) -> Option<Packet> {
-        let can_id = can_frame.can_id();
-        let total_frames = can_frame.data().get(0).copied()? + 1;
-        let frame_index = can_frame.data().get(1).copied()?;
+    /// Processes a fragmented SpaceCAN frame and attempts reassembly.
+    /// Returns a complete `Packet` once all fragments for a given CAN ID arrive.
+    pub fn process_fragment(&mut self, frame: &SpaceCANFrame) -> Option<Packet> {
+        let can_id = frame.can_id;
+        let data = &frame.data;
+        if data.len() < 2 {
+            return None;
+        }
+
+        let total_frames = data[0] as usize + 1;
+        let frame_index = data[1];
+        let payload = data[2..].to_vec();
 
         self.buffer
             .entry(can_id)
             .or_default()
-            .insert(frame_index, can_frame.data()[2..].to_vec());
+            .insert(frame_index, payload);
 
-        if self.buffer[&can_id].len() == total_frames as usize {
-            let mut data = Vec::new();
+        if self.buffer[&can_id].len() == total_frames {
+            let mut assembled = Vec::new();
             let framebuffer = self.buffer.remove(&can_id).unwrap();
-            for i in 0..total_frames {
-                if let Some(frame_data) = framebuffer.get(&i) {
-                    data.extend(frame_data);
+            for i in 0..total_frames as u8 {
+                if let Some(fragment) = framebuffer.get(&i) {
+                    assembled.extend(fragment);
                 } else {
-                    return None; // Incomplete packet
+                    return None;
                 }
             }
-            Some(Packet::new(Some(data)))
+            Some(Packet::new(Some(assembled)))
         } else {
             None
         }

@@ -141,7 +141,10 @@ impl<T: Bus> SpaceCANProtocol<T> {
             .map_err(|_| SpaceCANError::TransportError)
     }
 
-    /// Send a large packet by fragmenting it across multiple CAN frames
+    /// Send a large packet by fragmenting it across multiple CAN frames.
+    /// The real service/subservice bytes are prepended to the payload so they
+    /// survive reassembly on the receiving end. Each fragment is transmitted
+    /// with `ST_FRAGMENTED` as the on-wire service type.
     pub fn send_packet(
         &self,
         service_type: u8,
@@ -149,15 +152,20 @@ impl<T: Bus> SpaceCANProtocol<T> {
         target_node: u32,
         data: Vec<u8>,
     ) -> Result<(), SpaceCANError> {
-        let packet = Packet::new(Some(data));
+        let mut payload = Vec::with_capacity(2 + data.len());
+        payload.push(service_type);
+        payload.push(subservice_type);
+        payload.extend_from_slice(&data);
+
+        let packet = Packet::new(Some(payload));
         let fragments = packet.split();
 
         for fragment in fragments {
             let can_id = crate::constants::ID_TC | target_node;
             let frame = SpaceCANFrame::new(
                 can_id,
-                service_type,
-                subservice_type,
+                crate::constants::ST_FRAGMENTED,
+                0x00,
                 self.node_id,
                 fragment,
             )?;
@@ -167,34 +175,43 @@ impl<T: Bus> SpaceCANProtocol<T> {
         Ok(())
     }
 
-    /// Receive and process a CAN frame
+    /// Receive and process a CAN frame.
+    /// Frames tagged with `ST_FRAGMENTED` are routed to the packet assembler;
+    /// all other frames are returned directly as single-frame messages.
     pub fn receive_frame(&mut self) -> Result<Option<SpaceCANFrame>, SpaceCANError> {
-        if let Some(can_frame) = self.transport.get_frame() {
-            // Try to assemble packet if this is a fragmented frame
-            if let Some(packet) = self.packet_assembler.process_frame(can_frame.clone()) {
-                // Reconstruct the SpaceCAN frame from the complete packet
-                let data = packet.data();
-                if data.len() >= 2 {
-                    let service_type = data[0];
-                    let subservice_type = data[1];
-                    let payload = data[2..].to_vec();
+        let can_frame = match self.transport.get_frame() {
+            Some(f) => f,
+            None => return Ok(None),
+        };
 
-                    let frame = SpaceCANFrame::new(
-                        can_frame.can_id(),
-                        service_type,
-                        subservice_type,
-                        can_frame.get_node_id(),
-                        payload,
-                    )?;
-                    return Ok(Some(frame));
-                }
-            } else {
-                // Single frame, not fragmented
-                let frame = SpaceCANFrame::from_can_frame(can_frame)?;
-                return Ok(Some(frame));
-            }
+        let frame = SpaceCANFrame::from_can_frame(can_frame)?;
+
+        if frame.service_type != crate::constants::ST_FRAGMENTED {
+            return Ok(Some(frame));
         }
 
+        // Fragmented path: feed the frame to the assembler.
+        if let Some(packet) = self.packet_assembler.process_fragment(&frame) {
+            let reassembled = packet.data();
+            if reassembled.len() < 2 {
+                return Err(SpaceCANError::PacketAssemblyError);
+            }
+
+            let service_type = reassembled[0];
+            let subservice_type = reassembled[1];
+            let payload = reassembled[2..].to_vec();
+
+            let result = SpaceCANFrame::new(
+                frame.can_id,
+                service_type,
+                subservice_type,
+                frame.node_id,
+                payload,
+            )?;
+            return Ok(Some(result));
+        }
+
+        // Fragment buffered, packet not yet complete.
         Ok(None)
     }
 
