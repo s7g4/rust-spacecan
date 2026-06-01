@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
             heartbeat_counter = heartbeat_counter.wrapping_add(1);
 
             // Every 5 seconds send SYNC frame and time frames
-            if sync_counter % 5 == 0 {
+            if sync_counter.is_multiple_of(5) {
                 // SYNC frame (ID 0x080, empty payload)
                 let sync_id = StandardId::new(0x080).unwrap();
                 let sync_frame = CanFrame::new(sync_id, &[]).unwrap();
@@ -117,7 +117,7 @@ async fn main() -> Result<()> {
                     "st08" => {
                         let mut service =
                             ST08_function_management::FunctionManagementService::new();
-                        service.perform_function(1, vec![]);
+                        let _ = service.perform_function(1, vec![]);
                         let _ = sent_tx_clone
                             .send("ST08 service command executed".to_string())
                             .await;
@@ -137,9 +137,9 @@ async fn main() -> Result<()> {
                             .await;
                     }
                     "st20" => {
-                        let mut service =
+                        let service =
                             ST20_parameter_management::ParameterManagementService::new();
-                        service.report_parameter_values(vec![1]);
+                        let _ = service.report_parameter_values(vec![1]);
                         let _ = sent_tx_clone
                             .send("ST20 service command executed".to_string())
                             .await;
@@ -244,7 +244,7 @@ async fn main() -> Result<()> {
                         let mut service =
                             ST08_function_management::FunctionManagementService::new();
                         // Example call to perform_function
-                        service.perform_function(1, vec![]);
+                        let _ = service.perform_function(1, vec![]);
                     }
                     "3" => {
                         println!("Invoking ST03 Housekeeping Service...");
@@ -259,9 +259,9 @@ async fn main() -> Result<()> {
                     }
                     "5" => {
                         println!("Invoking ST20 Parameter Management Service...");
-                        let mut service =
+                        let service =
                             ST20_parameter_management::ParameterManagementService::new();
-                        service.report_parameter_values(vec![1]);
+                        let _ = service.report_parameter_values(vec![1]);
                     }
                     "b" => {
                         println!("Returning to main menu...");

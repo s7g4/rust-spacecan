@@ -83,7 +83,7 @@ jobs:
     - name: Set up Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        targets: thumbv6m-none-eabi
+        targets: thumbv7em-none-eabihf
 
     - name: Build Firmware
-      run: cargo build -p spacecan-firmware --target thumbv6m-none-eabi
+      run: cargo build -p spacecan-firmware --target thumbv7em-none-eabihf

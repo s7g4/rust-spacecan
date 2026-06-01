@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
     // Instantiate services
     let mut function_management = ST08_function_management::FunctionManagementService::new();
     let mut request_verification = ST01_request_verification::RequestVerificationService::new();
-    let mut parameter_management = ST20_parameter_management::ParameterManagementService::new();
+    let parameter_management = ST20_parameter_management::ParameterManagementService::new();
     let mut housekeeping = ST03_housekeeping::HousekeepingService::new();
     let mut test_service = ST17_test::TestService::new();
 
@@ -119,11 +119,11 @@ async fn main() -> anyhow::Result<()> {
                     }
                     _ => {
                         // Dispatch to services here, example:
-                        let _ = function_management.perform_function(raw_id as u16, data.to_vec());
+                        let _ = function_management.perform_function(raw_id, data.to_vec());
                         let _ =
-                            request_verification.accept_telecommand(raw_id as u16, raw_id as u32);
-                        let _ = parameter_management.report_parameter_values(vec![raw_id as u16]);
-                        let _ = housekeeping.create_report(vec![raw_id as u16], 0);
+                            request_verification.accept_telecommand(raw_id, raw_id as u32);
+                        let _ = parameter_management.report_parameter_values(vec![raw_id]);
+                        let _ = housekeeping.create_report(vec![raw_id], 0);
                         let _ = test_service.create_connection_test(raw_id as u32);
                         println!(
                             "Other CAN frame received: id=0x{:X} data={:?}",
