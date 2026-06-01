@@ -4,112 +4,65 @@
 
 SpaceCAN is a Rust workspace implementing a CAN (Controller Area Network) protocol stack for embedded spacecraft systems. It provides CAN frame encoding/decoding, ECSS PUS service routing, multi-frame packet fragmentation, and a virtual simulation harness.
 
-The workspace contains three crates:
+The workspace is strictly partitioned into three distinct operational domains:
 
-- **spacecan** — `no_std` core library with CAN primitives, protocol handling, and PUS services.
-- **spacecan-firmware** — Bare-metal firmware targeting STM32G071 (Cortex-M0+).
-- **spacecan-virtual** — Tokio-based simulation binaries for host-side protocol testing.
+- **spacecan** — The `#![no_std]` core protocol library. It implements ECSS PUS services and transport protocols with a strict **zero-allocation** architecture using `heapless`.
+- **spacecan-firmware** — Bare-metal firmware targeting STM32F4 (Cortex-M4F) utilizing the `cortex-m-rtic` realtime concurrency framework.
+- **spacecan-virtual** — A Tokio-based host simulation environment featuring virtual nodes communicating over UDP Multicast, and an Axum WebSocket bridge.
+- **dashboard** — A React/Vite Ground Station UI that interfaces with the virtual nodes.
 
-## Project Structure
+## Building & Linting
 
-```
-rust-spacecan/
-├── spacecan/                   # Core protocol library (no_std)
-│   ├── src/
-│   │   ├── primitives/         # CanFrame, Packet, Heartbeat, Sync, Timer
-│   │   ├── services/           # ECSS PUS service handlers (ST01–ST20)
-│   │   ├── transport/          # Bus trait, BusImpl, FrameBuffer, MockTransport
-│   │   ├── tests/              # Unit and integration tests
-│   │   ├── protocol.rs         # SpaceCANFrame, SpaceCANProtocol
-│   │   └── lib.rs              # Crate root and constants
-│   ├── examples/               # Usage examples (basic, packet, services)
-│   └── Cargo.toml
-├── spacecan-firmware/          # Bare-metal firmware crate
-│   ├── src/
-│   │   ├── main.rs             # Cortex-M entry point
-│   │   └── lib.rs
-│   ├── build.rs                # Copies memory.x to linker search path
-│   ├── memory.x                # STM32G071RB linker memory layout
-│   └── Cargo.toml
-├── spacecan-virtual/           # Host simulation binaries
-│   ├── controller.rs           # Virtual CAN controller node
-│   ├── responder.rs            # Virtual CAN responder node
-│   ├── src/main.rs
-│   └── Cargo.toml
-├── .github/workflows/ci.yml   # CI/CD pipeline
-├── Cargo.toml                  # Workspace root
-└── README.md
+Because the repository mixes standard OS targets and bare-metal ARM targets, you must strictly separate your build and linting commands.
+
+### 1. Virtual Nodes & Core Library (Host Target)
+
+```powershell
+cargo check -p spacecan -p spacecan-virtual
+cargo clippy -p spacecan -p spacecan-virtual -- -D warnings
+cargo test -p spacecan -p spacecan-virtual
 ```
 
-## Building
+### 2. Firmware (STM32F4 ARM Target)
 
-### Prerequisites
-
-```bash
-# Stable Rust toolchain
-rustup toolchain install stable
-
-# ARM target for firmware cross-compilation
-rustup target add thumbv6m-none-eabi
+```powershell
+cargo check -p spacecan-firmware --target thumbv7em-none-eabihf
+cargo clippy -p spacecan-firmware --target thumbv7em-none-eabihf -- -D warnings
 ```
 
-### Library and Simulation Binaries
+## Running the Project
 
-```bash
-cargo build -p spacecan
-cargo build -p spacecan-virtual
-```
+To experience the full SpaceCAN simulation, you need to run the Virtual Nodes, the WebSocket Bridge, and the React Dashboard concurrently.
 
-### Firmware (Cross-Compilation)
-
-```bash
-cargo build -p spacecan-firmware --target thumbv6m-none-eabi
-```
-
-## Running
-
-### Virtual Simulation
-
-Open two terminals and run:
-
-```bash
+### 1. Start the Virtual Simulation Nodes
+Open two separate terminals in the project root and run:
+```powershell
 cargo run -p spacecan-virtual --bin controller
 ```
-
-```bash
+```powershell
 cargo run -p spacecan-virtual --bin responder
 ```
+*(These nodes will immediately begin broadcasting heartbeat frames over UDP Multicast `224.0.0.123:5000`)*
 
-### Firmware
-
-Flash the compiled binary to an STM32G071 target via probe-rs, OpenOCD, or ST-Link.
-
-## Testing
-
-```bash
-cargo test -p spacecan
+### 2. Start the Dashboard Server (WebSocket Bridge)
+Open a third terminal in the project root and run:
+```powershell
+cargo run -p spacecan-virtual --bin dashboard_server
 ```
 
-## Features
+### 3. Run the Ground Station Dashboard (Frontend)
+Open a fourth terminal, navigate into the `dashboard` directory, and start the Vite UI:
+```powershell
+cd dashboard
+npm install
+npm run dev
+```
+Finally, open your browser to **http://localhost:5173**. You will see the telemetry stream parsing real-time UDP frames, and you can inject Telecommands via the UI.
 
-The `spacecan` library supports the following feature flags:
+*(Alternatively, you can run `npm run build` inside the `dashboard` folder, and the Rust backend will automatically serve the UI on `http://localhost:3000`)*.
 
-| Feature    | Description                                       |
-|------------|---------------------------------------------------|
-| `std`      | Enables tokio, serde_json, anyhow for host builds |
-| `embedded` | Enables cortex-m, cortex-m-rt, embedded-hal, nb   |
-| `defmt`    | Enables defmt structured logging                  |
+## CI/CD Pipeline
 
-## CI/CD
-
-The GitHub Actions pipeline runs on every push and pull request to `main`:
-
-- **Formatting** — `cargo fmt --all --check`
-- **Clippy** — Per-package lint checks with `-D warnings`
-- **Tests** — `spacecan` and `spacecan-virtual` on Ubuntu and Windows
-- **Embedded Check** — `cargo check -p spacecan --features embedded`
-- **Firmware Build** — Cross-compilation to `thumbv6m-none-eabi`
-
-## License
-
-MIT License
+The GitHub Actions pipeline (`ci.yml`) runs concurrently on every push and pull request. It is strictly split into two isolation jobs to prevent feature-leakage:
+- **Host CI**: Lints and tests the `spacecan` library and `spacecan-virtual` binaries on Windows using standard targets.
+- **Firmware CI**: Validates the embedded `#![no_std]` constraints by cross-compiling and linting `spacecan-firmware` to `thumbv7em-none-eabihf`.

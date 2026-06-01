@@ -1,112 +1,28 @@
-# Architecture Redesign: rust-spacecan
+# Architecture
 
-## 1. High-Level System Architecture
+The architecture focuses on hardware-software decoupling, strict memory safety, thread safety, and platform-agnostic simulation. The system is split into four distinct tiers.
 
-`rust-spacecan` utilizes a modular layered architecture, ensuring the core protocol logic remains completely isolated from hardware-specific registers.
+## 1. Core Protocol Layer (`spacecan`)
+The `spacecan` crate is a pure, `#![no_std]` library. It knows nothing about WebSockets, UDP, or specific STM32 hardware. 
+- **Primitives**: Defines `CanFrame` (8 bytes max) and `SpaceCANPacket` (up to 1024 bytes).
+- **Assembler**: The `PacketAssembler` breaks large packets into 8-byte chunks, inserting 2-bit sequence flags (`01` First, `00` Middle, `10` Last, `11` Unsegmented) to reconstruct payloads across the bus.
+- **Services**: The `ServiceManager` contains routing logic that inspects a packet's `packet_type` (e.g., 3 for ST03 Housekeeping) and dispatches it to the corresponding service handler.
+- **Memory**: Backed entirely by `heapless::Vec` and `heapless::FnvIndexMap`. Zero dynamic allocation.
 
-```mermaid
-graph TD
-    subgraph PUS Service Layer
-        ST01[ST01: Request Verification]
-        ST03[ST03: Housekeeping]
-        ST08[ST08: Function Management]
-        ST17[ST17: Test Service]
-        ST20[ST20: Parameter Management]
-    end
+## 2. Firmware Layer (`spacecan-firmware`)
+This crate is the bare-metal deployment of the core library.
+- Targets `thumbv7em-none-eabihf` (STM32F4).
+- Uses `cortex-m-rtic` to manage real-time concurrency.
+- Initializes an Independent Watchdog (`IWDG`) to prevent silent processor lockups.
+- Periodically dispatches heartbeat packets onto the physical CAN bus peripheral.
 
-    subgraph Core Routing Layer
-        SM[ServiceManager]
-        PA[PacketAssembler / Fragmenter]
-    end
+## 3. Virtual Network Layer (`spacecan-virtual`)
+This crate provides host-side simulation without requiring physical hardware.
+- It instantiates multiple independent processes (`controller` and `responder`).
+- Replaces the physical CAN bus with a UDP Multicast network (bound to `224.0.0.123:5000`).
+- The virtual nodes deserialize UDP datagrams, reconstruct them into `CanFrame` structs, and feed them into the exact same `spacecan` core library that the firmware uses.
 
-    subgraph Abstract Transport Layer
-        BT[Bus Trait]
-        FB[Thread-Safe FrameBuffer]
-    end
-
-    subgraph Concrete Implementations
-        STM32[stm32f4xx-hal bxCAN Driver]
-        UDPMock[UDP Virtual Socket Driver]
-    end
-
-    ST01 --> SM
-    ST03 --> SM
-    ST08 --> SM
-    ST17 --> SM
-    ST20 --> SM
-
-    SM --> PA
-    PA --> BT
-    BT --> FB
-    FB --> STM32
-    FB --> UDPMock
-```
-
-## 2. Component Boundaries
-
-The project is structured into three discrete crates with strict boundaries:
-
-1. **`spacecan` (Library)**:
-   - **Properties**: Strictly `#![no_std]`, no unconditional global allocators.
-   - **Boundary**: Exposes the `Bus` trait for injection. Contains protocol parser, PUS service routers, and packet serialization logic.
-2. **`spacecan-firmware` (Bare-Metal Binary)**:
-   - **Properties**: `#![no_std]`, `#![no_main]`, target architecture `thumbv7em-none-eabihf`.
-   - **Boundary**: Initializes hardware clocks, GPIOs, and the STM32F4 `bxcan` peripheral. Injects the bxCAN driver into `spacecan::SpaceCANProtocol`. Handles raw MCU interrupts.
-3. **`spacecan-virtual` (Desktop Simulation)**:
-   - **Properties**: Standard `std` compilation, targets development hosts (Windows, Linux, macOS).
-   - **Boundary**: Spawns tokio runtime. Injects a UDP-based virtual loopback/multicast transport into the protocol engine. Offers a CLI interface for system testing.
-
-## 3. Data Flow
-
-### A. Telecommand (TC) Reception Pipeline
-```mermaid
-sequenceDiagram
-    participant Hardware as CAN Controller (bxCAN / Socket)
-    participant Interrupt as ISR / Rx Task
-    participant Buffer as FrameBuffer
-    participant Assembler as PacketAssembler
-    participant Router as ServiceManager
-    participant Service as PUS Service Handler
-
-    Hardware->>Interrupt: Rx Interrupt (Frame Arrived)
-    Interrupt->>Buffer: push_back(CanFrame) (Lock-free / Mutex)
-    Note over Buffer: Frame queued securely
-    Interrupt-->>Hardware: Acknowledge Interrupt
-    
-    %% Processing Loop
-    loop Polling / Receive Task
-        Router->>Buffer: pop_front()
-        Buffer-->>Router: Some(CanFrame)
-        Router->>Assembler: process_frame(CanFrame)
-        alt Packet Incomplete
-            Assembler-->>Router: None (Buffer fragment)
-        else Packet Fully Assembled
-            Assembler-->>Router: Some(Packet)
-            Router->>Router: Parse SpaceCAN ID & Header
-            Router->>Service: handle_request(Subservice, Payload)
-            Service-->>Router: Optional Response Data
-            Note over Router: Routing finished
-        end
-    end
-```
-
-## 4. Failure Modes & Safety
-
-| Failure Mode | Detection Mechanism | Mitigation Strategy |
-| :--- | :--- | :--- |
-| **Bus Buffer Overflow** | Check `FrameBuffer` capacity bounds on push. | Drop the oldest packet (embedded ring-buffer strategy) and set an error status flag in the heartbeat status byte. |
-| **Heartbeat Timeout** | `NetworkManager` tracks `last_seen` timestamp per node. | Switch the selected active bus (arbitrate from Bus A to Bus B) and trigger a ST01 execution failure report if active operations fail. |
-| **Packet Assembly Drift** | Timestamp tracking on packet assembler buffers. | Flush fragment buffers for a specific CAN ID if no packets are received within 3 seconds, avoiding memory leaks. |
-| **Thread Race Conditions** | Prevented by Rust compiler. | Replace `UnsafeCell` with `critical-section` atomic locks for `no_std`, and standard `Mutex` / channels for virtual targets. |
-
-## 5. Portability & Scalability Strategy
-
-- **Hardware Decoupling**: The protocol communicates with the bus solely through the `Bus` trait:
-  ```rust
-  pub trait Bus: Send + Sync {
-      fn send(&self, frame: &CanFrame) -> Result<(), CanFrameError>;
-      fn receive(&self) -> Result<Option<CanFrame>, CanFrameError>;
-  }
-  ```
-- **Virtualization over UDP**: Instead of raw SocketCAN (Linux-only), the mock transport uses standard UDP multicast sockets. This allows developers to spin up multi-node virtual spacecraft networks on Windows, Linux, or macOS.
-- **Dynamic PUS Services**: `ServiceManager` uses a map interface to register service handlers dynamically, allowing teams to add new ECSS services without modifying core routing logic.
+## 4. Ground Station Dashboard (`dashboard` + `dashboard_server`)
+Provides real-time visualization of the network.
+- **`dashboard_server`**: A Rust Axum application that listens on the UDP Multicast network, converts the binary `CanFrame` data into JSON, and broadcasts it over WebSockets.
+- **`dashboard` (React/Vite)**: Connects to the WebSocket, renders a scrolling live telemetry stream, and provides interactive buttons to inject PUS Telecommands back into the network.
