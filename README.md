@@ -1,5 +1,8 @@
 # SpaceCAN
 
+[![CI](https://github.com/s7g4/rust-spacecan/actions/workflows/ci.yml/badge.svg)](https://github.com/s7g4/rust-spacecan/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 ## Overview
 
 SpaceCAN is a Rust workspace implementing a CAN (Controller Area Network) protocol stack for embedded spacecraft systems. It provides CAN frame encoding/decoding, ECSS PUS service routing, multi-frame packet fragmentation, and a virtual simulation harness.
